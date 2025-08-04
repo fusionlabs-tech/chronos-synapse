@@ -1,0 +1,188 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  username          String    @unique
+  firstName         String
+  lastName          String
+  password          String
+  role              Role      @default(USER)
+  isActive          Boolean   @default(true)
+  emailVerified     Boolean   @default(false)
+  emailVerifyToken  String?   @unique // For email verification
+  emailVerifyExpiry DateTime? // When email verification token expires
+  lastLoginAt       DateTime?
+  resetToken        String?   @unique // For password reset
+  resetTokenExpiry  DateTime? // When reset token expires
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  jobs          Job[]
+  teams         TeamMember[]
+  apiKeys       ApiKey[]
+  sessions      UserSession[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model Team {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  members TeamMember[]
+  jobs    Job[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id     String   @id @default(uuid())
+  userId String
+  teamId String
+  role   TeamRole @default(MEMBER)
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@map("team_members")
+}
+
+model ApiKey {
+  id          String    @id @default(uuid())
+  name        String // User-friendly name for the API key
+  key         String    @unique // Hashed API key
+  userId      String
+  permissions String[] // Array of permissions
+  isActive    Boolean   @default(true)
+  lastUsedAt  DateTime?
+  expiresAt   DateTime? // Optional expiration
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
+}
+
+model UserSession {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique // JWT token hash or session token
+  expiresAt DateTime
+  isActive  Boolean  @default(true)
+  userAgent String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+model Job {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+  schedule    String // Cron expression
+  command     String
+  enabled     Boolean @default(true)
+  timeout     Int     @default(300) // seconds
+  retries     Int     @default(3)
+
+  // Metadata
+  userId      String
+  teamId      String?
+  tags        String[]
+  environment Json? // Environment variables
+
+  // Tracking
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  lastRun   DateTime?
+  nextRun   DateTime?
+
+  // Relations
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team       Team?          @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  executions JobExecution[]
+
+  @@map("jobs")
+}
+
+model JobExecution {
+  id         String          @id @default(uuid())
+  jobId      String
+  status     ExecutionStatus @default(RUNNING)
+  startedAt  DateTime        @default(now())
+  finishedAt DateTime?
+  duration   Int? // milliseconds
+  exitCode   Int?
+  output     String?
+  error      String?
+
+  // AI Analysis
+  errorVector Float[] @default([]) // For semantic clustering
+  analyzed    Boolean @default(false)
+
+  // Relations
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@map("job_executions")
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String // job_success, job_failed, job_timeout, system_alert, job_created, job_updated, job_deleted
+  title     String
+  message   String
+  data      Json? // Additional data for the notification
+  isRead    Boolean   @default(false)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum TeamRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum ExecutionStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+  TIMEOUT
+  CANCELLED
+}
