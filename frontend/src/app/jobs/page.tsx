@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { formatDateTime } from '@/lib/utils';
 import { useRealtime } from '@/contexts/PubSubContext';
 import { Search, Grid, List } from 'lucide-react';
 
-export default function JobsPage() {
+function JobsPage() {
  const router = useRouter();
  const searchParams = useSearchParams();
  const pathname = usePathname();
@@ -267,5 +267,19 @@ export default function JobsPage() {
     </div>
    )}
   </div>
+ );
+}
+
+export default function JobsPageWrapper() {
+ return (
+  <Suspense
+   fallback={
+    <div className='flex items-center justify-center h-64'>
+     <div className='loading-spinner h-12 w-12'></div>
+    </div>
+   }
+  >
+   <JobsPage />
+  </Suspense>
  );
 }
