@@ -142,7 +142,7 @@ export default function Error({ error, reset }: ErrorProps) {
         <span className='text-red-500'>❤️</span>
         <span>and lots of</span>
         <span className='text-yellow-500'>☕</span>
-        <span>by the Chronos Synapse team</span>
+        <span>by the Chronos team</span>
        </div>
       </div>
 

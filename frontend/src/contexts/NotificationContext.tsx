@@ -8,8 +8,8 @@ import {
  useEffect,
 } from 'react';
 import { apiClient } from '@/lib/api';
-import { useWebSocket } from '@/hooks/useWebSocket';
-import { useToast } from '@/components/ui/Toast';
+import { usePubSub } from '@/hooks/usePubSub';
+import { useToast } from '@/components/ui/toast';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface NotificationContextType {
@@ -31,28 +31,31 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
  const { showToast } = useToast();
  const { user, token } = useAuth();
 
- // WebSocket connection for real-time notifications
- const { connected: wsConnected } = useWebSocket({
-  onNotification: (data) => {
-   // Handle real-time notification updates
-   if (data.type === 'notification_count') {
-    setUnreadCount(data.count as number);
-   } else if (data.type === 'new_notification') {
-    // Increment unread count for new notifications
-    setUnreadCount((prev) => prev + 1);
+ // Pub/Sub connection for real-time notifications (only when authenticated)
+ const { connected: wsConnected } = usePubSub(
+  {
+   onNotification: (data) => {
+    // Handle real-time notification updates
+    if (data.type === 'notification_count') {
+     setUnreadCount(data.count as number);
+    } else if (data.type === 'new_notification') {
+     // Increment unread count for new notifications
+     setUnreadCount((prev) => prev + 1);
 
-    // Show toast for new notifications
-    if (data.message && data.level) {
-     showToast(
-      data.message as string,
-      data.level as 'success' | 'error' | 'warning' | 'info'
-     );
+     // Show toast for new notifications
+     if (data.message && data.level) {
+      showToast(
+       data.message as string,
+       data.level as 'success' | 'error' | 'warning' | 'info'
+      );
+     }
     }
-   }
+   },
+   autoReconnect: true,
+   reconnectInterval: 5000,
   },
-  autoReconnect: true,
-  reconnectInterval: 5000,
- });
+  !!user && !!token
+ ); // Only connect when user is authenticated
 
  // Fetch initial notification count on mount - only when authenticated
  useEffect(() => {

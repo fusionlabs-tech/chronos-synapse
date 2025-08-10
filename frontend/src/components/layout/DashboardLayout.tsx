@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { NAVIGATION } from '@/constants';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNotifications } from '@/contexts/NotificationContext';
-import { useRealtime } from '@/contexts/RealtimeContext';
+import { useRealtime } from '@/contexts/PubSubContext';
 import {
  LogOut,
  User,
@@ -16,6 +16,8 @@ import {
  ChevronDown,
  Bell,
  Search,
+ Brain,
+ Activity,
 } from 'lucide-react';
 import NotificationDropdown from '@/components/NotificationDropdown';
 
@@ -24,12 +26,11 @@ interface DashboardLayoutProps {
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
- const [sidebarOpen, setSidebarOpen] = useState(false);
  const [userMenuOpen, setUserMenuOpen] = useState(false);
  const pathname = usePathname();
  const { user, logout } = useAuth();
  const userMenuRef = useRef<HTMLDivElement>(null);
- const { sseConnected, sseError } = useRealtime();
+ const { pubSubConnected, pubSubError } = useRealtime();
 
  // Close user menu when clicking outside
  useEffect(() => {
@@ -52,202 +53,169 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
  }, [userMenuOpen]);
 
  return (
-  <div className='h-screen flex bg-gradient-to-br from-neutral-50 via-primary-50 to-secondary-50'>
-   {/* Mobile sidebar overlay */}
-   {sidebarOpen && (
-    <div
-     className='fixed inset-0 z-40 bg-neutral-600 bg-opacity-75 lg:hidden backdrop-blur-sm'
-     onClick={() => setSidebarOpen(false)}
-    />
-   )}
-
-   {/* Sidebar - Fixed */}
-   <aside
-    className={cn(
-     'fixed inset-y-0 left-0 z-50 w-64 card-primary border-r border-neutral-200/50 shadow-2xl transform lg:relative lg:translate-x-0',
-     sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-    )}
-   >
-    <div className='flex flex-col h-full'>
-     {/* Logo */}
-     <div className='flex items-center justify-between h-16 px-6 border-b border-neutral-200/50'>
-      <div className='flex items-center space-x-3'>
-       <div className='w-10 h-10 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-xl flex items-center justify-center shadow-lg'>
-        <span className='text-white text-lg font-bold'>⚡</span>
-       </div>
-       <div>
-        <h1 className='text-xl font-bold text-neutral-900'>Chronos</h1>
-        <p className='text-xs text-neutral-500 font-medium'>Synapse</p>
+  <div className='min-h-screen flex flex-col bg-gradient-to-br from-neutral-50 via-primary-50 to-secondary-50'>
+   {/* Top Header Bar with brand, nav and status */}
+   <header className='h-16 card-primary border-b border-neutral-200/50 flex items-center px-6 shadow-lg'>
+    {/* Left: Logo */}
+    <div className='flex items-center gap-3'>
+     <div className='relative w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg'>
+      <div className='relative'>
+       <div className='w-5 h-5 rounded-full border border-white/80 relative'>
+        <div className='absolute top-1/2 left-1/2 w-0.5 h-1.5 bg-white transform -translate-x-1/2 -translate-y-full origin-bottom rotate-45'></div>
+        <div className='absolute top-1/2 left-1/2 w-0.5 h-1 bg-white transform -translate-x-1/2 -translate-y-full origin-bottom rotate-90'></div>
+        <div className='absolute top-1/2 left-1/2 w-0.5 h-0.5 bg-white rounded-full transform -translate-x-1/2 -translate-y-1/2'></div>
        </div>
       </div>
-      <button
-       className='lg:hidden p-2 rounded-lg hover:bg-neutral-100 transition-colors'
-       onClick={() => setSidebarOpen(false)}
-      >
-       <span className='text-neutral-400 text-xl'>&times;</span>
-      </button>
      </div>
+     <h1 className='text-xl font-bold text-neutral-900'>Chronos</h1>
+    </div>
 
-     {/* Navigation */}
-     <nav className='flex-1 px-4 py-6 space-y-2'>
+    {/* Center: Navigation - flex-1 and centered */}
+    <nav className='flex-1 flex items-center justify-center'>
+     <div className='flex items-center gap-4'>
       {NAVIGATION.map((item) => {
-       // Skip admin-only items for non-admin users
-       if (item.adminOnly && user?.role !== 'ADMIN') {
-        return null;
-       }
-
+       if (item.adminOnly && user?.role !== 'ADMIN') return null;
        const isActive =
         pathname === item.href || pathname.startsWith(item.href);
-
        return (
         <Link
          key={item.name}
          href={item.href}
          className={cn(
-          'flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200',
+          'text-sm font-medium px-3 py-2 rounded-lg transition-colors',
           isActive
-           ? 'bg-gradient-to-r from-primary-100 to-secondary-100 text-primary-700 border border-primary-200/50 shadow-lg'
-           : 'text-neutral-700 hover:bg-neutral-100/80 hover:shadow-md'
+           ? 'bg-neutral-100 text-primary-700'
+           : 'text-neutral-700 hover:bg-neutral-100'
          )}
-         onClick={() => setSidebarOpen(false)}
         >
-         <span className='text-lg'>{item.icon}</span>
-         <span>{item.name}</span>
+         {item.name}
         </Link>
        );
       })}
-     </nav>
-
-     {/* System Status */}
-     <div className='p-4 border-t border-neutral-200/50'>
-      <div className='flex items-center space-x-3 p-3 rounded-xl bg-neutral-50'>
-       <div
-        className={`w-3 h-3 rounded-full shadow-lg ${
-         sseConnected ? 'bg-accent-green-500 animate-pulse' : 'bg-red-500'
-        }`}
-       ></div>
-       <span className='text-sm font-medium text-neutral-700'>
-        {sseConnected ? 'System Online' : 'System Disconnected'}
-       </span>
-      </div>
      </div>
-    </div>
-   </aside>
+    </nav>
 
-   {/* Main Content Area */}
-   <div className='flex-1 flex flex-col overflow-hidden'>
-    {/* Top Header Bar */}
-    <header className='h-16 card-primary border-b border-neutral-200/50 flex items-center justify-between px-6 shadow-lg'>
-     {/* Mobile menu button */}
-     <button
-      className='lg:hidden p-2 rounded-lg hover:bg-neutral-100 transition-colors'
-      onClick={() => setSidebarOpen(true)}
-     >
-      <span className='text-neutral-600 text-xl'>☰</span>
-     </button>
-
-     {/* Search Bar */}
-     <div className='hidden md:flex items-center flex-1 max-w-md mx-8'>
-      <div className='relative w-full'>
-       <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-neutral-400' />
-       <input
-        type='text'
-        placeholder='Search jobs, analytics...'
-        className='input-primary w-full pl-10 pr-4 py-2.5 rounded-full'
-       />
-      </div>
+    {/* Right: Status + Notifications + User */}
+    <div className='flex items-center gap-4'>
+     <div className='hidden md:flex items-center space-x-2 p-2 rounded-xl bg-neutral-50 border border-neutral-200/50'>
+      <div
+       className={`w-2.5 h-2.5 rounded-full ${
+        pubSubConnected ? 'bg-accent-green-500' : 'bg-red-500'
+       }`}
+      ></div>
+      <span className='text-xs text-neutral-700'>
+       {pubSubConnected ? 'Connected' : 'Disconnected'}
+      </span>
      </div>
 
-     {/* Header content */}
-     <div className='flex items-center space-x-3'>
-      {/* Notifications */}
-      <NotificationDropdown />
+     <NotificationDropdown />
 
-      {/* User Menu */}
-      <div className='relative' ref={userMenuRef}>
-       <button
-        onClick={() => setUserMenuOpen(!userMenuOpen)}
-        className='flex items-center space-x-3 p-2 rounded-lg hover:bg-neutral-100 transition-colors'
-       >
+     {/* User Menu */}
+     <div className='relative' ref={userMenuRef}>
+      <button
+       onClick={() => setUserMenuOpen(!userMenuOpen)}
+       className='flex items-center space-x-3 p-2 rounded-lg hover:bg-neutral-100 transition-colors'
+      >
+       {/* Avatar or initials */}
+       {user?.avatar ? (
+        <img
+         src={user.avatar}
+         alt='avatar'
+         className='w-9 h-9 rounded-full object-cover shadow-lg'
+        />
+       ) : (
         <div className='w-9 h-9 bg-gradient-to-br from-primary-500 to-secondary-500 rounded-full flex items-center justify-center shadow-lg'>
          <span className='text-white text-sm font-bold'>
-          {user?.firstName?.[0]}
-          {user?.lastName?.[0] || user?.username?.[0]}
+          {user?.firstName && user?.lastName
+           ? `${user.firstName[0]?.toUpperCase() || ''}${
+              user.lastName[0]?.toUpperCase() || ''
+             }`
+           : user?.firstName
+           ? user.firstName[0]?.toUpperCase()
+           : (user?.username?.[0] || 'U').toUpperCase()}
          </span>
         </div>
-        <div className='hidden md:block text-left'>
+       )}
+       <div className='hidden md:block text-left'>
+        <div className='text-sm font-semibold text-neutral-900'>
+         {user?.firstName && user?.lastName
+          ? `${user.firstName} ${user.lastName}`
+          : user?.firstName
+          ? user.firstName
+          : user?.username || 'User'}
+        </div>
+        <div className='text-xs text-neutral-500'>{user?.email}</div>
+       </div>
+       <ChevronDown
+        className={`h-4 w-4 text-neutral-400 transition-transform ${
+         userMenuOpen ? 'rotate-180' : ''
+        }`}
+       />
+      </button>
+
+      {/* User Dropdown Menu */}
+      {userMenuOpen && (
+       <div className='absolute right-0 mt-2 w-56 card-primary border border-neutral-200 py-2 z-50'>
+        <div className='px-4 py-3 border-b border-neutral-100'>
          <div className='text-sm font-semibold text-neutral-900'>
-          {user?.firstName} {user?.lastName}
+          {user?.firstName && user?.lastName
+           ? `${user.firstName} ${user.lastName}`
+           : user?.firstName
+           ? user.firstName
+           : user?.username || 'User'}
          </div>
          <div className='text-xs text-neutral-500'>{user?.email}</div>
         </div>
-        <ChevronDown
-         className={`h-4 w-4 text-neutral-400 transition-transform ${
-          userMenuOpen ? 'rotate-180' : ''
-         }`}
-        />
-       </button>
 
-       {/* User Dropdown Menu */}
-       {userMenuOpen && (
-        <div className='absolute right-0 mt-2 w-56 card-primary border border-neutral-200 py-2 z-50'>
-         <div className='px-4 py-3 border-b border-neutral-100'>
-          <div className='text-sm font-semibold text-neutral-900'>
-           {user?.firstName} {user?.lastName}
-          </div>
-          <div className='text-xs text-neutral-500'>{user?.email}</div>
-         </div>
+        <Link
+         href='/profile'
+         className='flex items-center px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors'
+         onClick={() => setUserMenuOpen(false)}
+        >
+         <User className='h-4 w-4 mr-3' />
+         Profile Settings
+        </Link>
 
+        <Link
+         href='/api-keys'
+         className='flex items-center px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors'
+         onClick={() => setUserMenuOpen(false)}
+        >
+         <Key className='h-4 w-4 mr-3' />
+         API Keys
+        </Link>
+
+        {user?.role === 'ADMIN' && (
          <Link
-          href='/profile'
+          href='/dashboard/admin'
           className='flex items-center px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors'
           onClick={() => setUserMenuOpen(false)}
          >
-          <User className='h-4 w-4 mr-3' />
-          Profile Settings
+          <Settings className='h-4 w-4 mr-3' />
+          Admin Dashboard
          </Link>
+        )}
 
-         <Link
-          href='/api-keys'
-          className='flex items-center px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors'
-          onClick={() => setUserMenuOpen(false)}
+        <div className='border-t border-neutral-100 mt-2 pt-2'>
+         <button
+          onClick={() => {
+           logout();
+           setUserMenuOpen(false);
+          }}
+          className='flex items-center w-full px-4 py-2.5 text-sm text-accent-red-600 hover:bg-accent-red-50 transition-colors'
          >
-          <Key className='h-4 w-4 mr-3' />
-          API Keys
-         </Link>
-
-         {user?.role === 'ADMIN' && (
-          <Link
-           href='/dashboard/admin'
-           className='flex items-center px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors'
-           onClick={() => setUserMenuOpen(false)}
-          >
-           <Settings className='h-4 w-4 mr-3' />
-           Admin Dashboard
-          </Link>
-         )}
-
-         <div className='border-t border-neutral-100 mt-2 pt-2'>
-          <button
-           onClick={() => {
-            logout();
-            setUserMenuOpen(false);
-           }}
-           className='flex items-center w-full px-4 py-2.5 text-sm text-accent-red-600 hover:bg-accent-red-50 transition-colors'
-          >
-           <LogOut className='h-4 w-4 mr-3' />
-           Sign Out
-          </button>
-         </div>
+          <LogOut className='h-4 w-4 mr-3' />
+          Sign Out
+         </button>
         </div>
-       )}
-      </div>
+       </div>
+      )}
      </div>
-    </header>
+    </div>
+   </header>
 
-    {/* Page Content */}
-    <main className='flex-1 overflow-y-auto p-6'>{children}</main>
-   </div>
+   {/* Page Content */}
+   <main className='flex-1 overflow-y-auto p-6'>{children}</main>
   </div>
  );
 }

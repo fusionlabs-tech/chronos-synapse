@@ -3,11 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { DashboardStats, Job, JobExecution } from '@/types';
-import { useToast } from '@/components/ui/Toast';
-import { useRealtime } from '@/contexts/RealtimeContext';
+import { useRealtime } from '@/contexts/PubSubContext';
 import {
- Plus,
  Play,
  Clock,
  TrendingUp,
@@ -26,33 +23,20 @@ import {
 import Link from 'next/link';
 
 export default function DashboardPage() {
- const { showToast } = useToast();
  const {
   dashboardStats: stats,
   jobs,
   recentExecutions,
-  sseConnected,
-  sseError,
-  refreshDashboardStats,
-  refreshJobs,
+  pubSubConnected,
  } = useRealtime();
-
  const [loading, setLoading] = useState(true);
 
- // Initial load - show data when available, don't wait for WebSocket
  useEffect(() => {
-  if (stats && jobs.length > 0) {
-   setLoading(false);
-  }
+  if (stats && jobs.length > 0) setLoading(false);
  }, [stats, jobs]);
 
- // Show loading state initially
  useEffect(() => {
-  // Set a timeout to stop loading even if data doesn't come
-  const timeout = setTimeout(() => {
-   setLoading(false);
-  }, 5000); // 5 second timeout
-
+  const timeout = setTimeout(() => setLoading(false), 5000);
   return () => clearTimeout(timeout);
  }, []);
 
@@ -96,22 +80,17 @@ export default function DashboardPage() {
   const diffInMinutes = Math.floor(
    (now.getTime() - date.getTime()) / (1000 * 60)
   );
-
   if (diffInMinutes < 1) return 'Just now';
   if (diffInMinutes < 60) return `${diffInMinutes} min ago`;
-
   const diffInHours = Math.floor(diffInMinutes / 60);
   if (diffInHours < 24)
    return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
-
   const diffInDays = Math.floor(diffInHours / 24);
   return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
  };
 
- const formatDuration = (duration: number | undefined) => {
-  if (!duration) return '0s';
-  return `${(duration / 1000).toFixed(1)}s`;
- };
+ const formatDuration = (duration: number | undefined) =>
+  duration ? `${(duration / 1000).toFixed(1)}s` : '0s';
 
  if (loading) {
   return (
@@ -124,28 +103,18 @@ export default function DashboardPage() {
  return (
   <div className='max-w-7xl mx-auto space-y-8'>
    {/* Page Header */}
-   <div className='text-center space-y-4'>
-    <div className='page-header-icon'>
-     <span className='text-white text-2xl font-bold'>⚡</span>
-    </div>
-    <div>
-     <h1 className='page-header-title'>Dashboard</h1>
-     <p className='text-neutral-600 mt-2 text-lg'>
-      Monitor and manage your cron jobs with real-time insights
-     </p>
-    </div>
+   <div className='text-center space-y-2'>
+    <h1 className='page-header-title'>Overview</h1>
+    <p className='text-neutral-600 text-lg'>
+     Real-time status and metrics from your applications
+    </p>
    </div>
 
    {/* Stats Cards */}
    <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6'>
     <Card className='card-gradient-primary'>
      <CardHeader className='pb-4'>
-      <CardTitle className='flex items-center gap-3 text-lg'>
-       <div className='icon-container-primary'>
-        <Settings className='h-5 w-5' />
-       </div>
-       Total Jobs
-      </CardTitle>
+      <CardTitle className='text-lg'>Total Jobs</CardTitle>
      </CardHeader>
      <CardContent>
       <div className='text-3xl font-bold gradient-text-primary mb-2'>
@@ -159,12 +128,7 @@ export default function DashboardPage() {
 
     <Card className='card-gradient-green'>
      <CardHeader className='pb-4'>
-      <CardTitle className='flex items-center gap-3 text-lg'>
-       <div className='icon-container-green'>
-        <Play className='h-5 w-5' />
-       </div>
-       Recent Executions
-      </CardTitle>
+      <CardTitle className='text-lg'>Recent Executions</CardTitle>
      </CardHeader>
      <CardContent>
       <div className='text-3xl font-bold gradient-text-green mb-2'>
@@ -176,12 +140,7 @@ export default function DashboardPage() {
 
     <Card className='card-gradient-blue'>
      <CardHeader className='pb-4'>
-      <CardTitle className='flex items-center gap-3 text-lg'>
-       <div className='icon-container-blue'>
-        <TrendingUp className='h-5 w-5' />
-       </div>
-       Success Rate
-      </CardTitle>
+      <CardTitle className='text-lg'>Success Rate</CardTitle>
      </CardHeader>
      <CardContent>
       <div className='text-3xl font-bold gradient-text-blue mb-2'>
@@ -193,12 +152,7 @@ export default function DashboardPage() {
 
     <Card className='card-gradient-orange'>
      <CardHeader className='pb-4'>
-      <CardTitle className='flex items-center gap-3 text-lg'>
-       <div className='icon-container-orange'>
-        <Clock className='h-5 w-5' />
-       </div>
-       Avg Duration
-      </CardTitle>
+      <CardTitle className='text-lg'>Avg Duration</CardTitle>
      </CardHeader>
      <CardContent>
       <div className='text-3xl font-bold gradient-text-orange mb-2'>
@@ -213,47 +167,30 @@ export default function DashboardPage() {
    <div className='grid grid-cols-1 lg:grid-cols-2 gap-8'>
     <Card className='card-primary'>
      <CardHeader className='pb-6'>
-      <CardTitle className='flex items-center gap-3 text-xl'>
-       <div className='icon-container-primary'>
-        <Plus className='h-5 w-5' />
-       </div>
-       Quick Actions
-      </CardTitle>
+      <CardTitle className='text-xl'>Quick Actions</CardTitle>
      </CardHeader>
-     <CardContent className='space-y-4'>
-      <Link href='/jobs/new'>
-       <Button className='btn-primary w-full py-3 rounded-lg flex items-center justify-center gap-2'>
-        <Plus className='h-4 w-4' />
-        Create New Job
-       </Button>
-      </Link>
-
-      <Link href='/jobs'>
+     <CardContent>
+      <Link href='/jobs' className='block'>
        <Button
         variant='outline'
-        className='btn-secondary w-full py-3 rounded-lg flex items-center justify-center gap-2'
+        className='w-full py-3 mb-4 rounded-lg border-primary text-primary'
        >
-        <Settings className='h-4 w-4' />
-        Manage Jobs
+        View Jobs
        </Button>
       </Link>
-
-      <Link href='/analytics'>
+      <Link href='/analytics' className='block'>
        <Button
         variant='outline'
-        className='btn-secondary w-full py-3 rounded-lg flex items-center justify-center gap-2'
+        className='w-full py-3 mb-4 rounded-lg border-accent-green-500 text-accent-green-600 hover:bg-green-50'
        >
-        <BarChart3 className='h-4 w-4' />
         View Analytics
        </Button>
       </Link>
-
-      <Link href='/ai-insights'>
+      <Link href='/ai-insights' className='block'>
        <Button
         variant='outline'
-        className='btn-secondary w-full py-3 rounded-lg flex items-center justify-center gap-2'
+        className='w-full py-3 mb-1 rounded-lg border-orange-500 text-orange-600 hover:bg-orange-50'
        >
-        <span className='text-lg'>🤖</span>
         AI Insights
        </Button>
       </Link>
@@ -262,41 +199,31 @@ export default function DashboardPage() {
 
     <Card className='card-primary'>
      <CardHeader className='pb-6'>
-      <CardTitle className='flex items-center gap-3 text-xl'>
-       <div className='icon-container-green'>
-        <Activity className='h-5 w-5' />
-       </div>
-       System Status
-      </CardTitle>
+      <CardTitle className='text-xl'>System Status</CardTitle>
      </CardHeader>
      <CardContent className='space-y-4'>
       <div
        className={`flex items-center justify-between p-4 rounded-lg border ${
-        sseConnected
+        pubSubConnected
          ? 'bg-green-50 border-green-200'
          : 'bg-red-50 border-red-200'
        }`}
       >
        <div className='flex items-center gap-3'>
-        {sseConnected ? (
-         <CheckCircle className='h-5 w-5 text-green-600' />
-        ) : (
-         <XCircle className='h-5 w-5 text-red-600' />
-        )}
         <div>
          <p
           className={`font-medium ${
-           sseConnected ? 'text-green-900' : 'text-red-900'
+           pubSubConnected ? 'text-green-900' : 'text-red-900'
           }`}
          >
-          {sseConnected ? 'System Online' : 'System Disconnected'}
+          {pubSubConnected ? 'System Online' : 'System Disconnected'}
          </p>
          <p
           className={`text-sm ${
-           sseConnected ? 'text-green-700' : 'text-red-700'
+           pubSubConnected ? 'text-green-700' : 'text-red-700'
           }`}
          >
-          {sseConnected
+          {pubSubConnected
            ? 'All services operational'
            : 'Real-time connection lost'}
          </p>
@@ -304,14 +231,13 @@ export default function DashboardPage() {
        </div>
        <div
         className={`w-3 h-3 rounded-full ${
-         sseConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+         pubSubConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
         }`}
        ></div>
       </div>
 
       <div className='flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200'>
        <div className='flex items-center gap-3'>
-        <Calendar className='h-5 w-5 text-blue-600' />
         <div>
          <p className='font-medium text-blue-900'>Scheduled Jobs</p>
          <p className='text-sm text-blue-700'>
@@ -324,7 +250,6 @@ export default function DashboardPage() {
 
       <div className='flex items-center justify-between p-4 bg-purple-50 rounded-lg border border-purple-200'>
        <div className='flex items-center gap-3'>
-        <Zap className='h-5 w-5 text-purple-600' />
         <div>
          <p className='font-medium text-purple-900'>Performance</p>
          <p className='text-sm text-purple-700'>Excellent response times</p>
@@ -336,80 +261,7 @@ export default function DashboardPage() {
     </Card>
    </div>
 
-   {/* Recent Activity */}
-   <Card className='card-primary'>
-    <CardHeader className='pb-6'>
-     <CardTitle className='flex items-center gap-3 text-xl'>
-      <div className='icon-container-orange'>
-       <Activity className='h-5 w-5' />
-      </div>
-      Recent Activity
-     </CardTitle>
-    </CardHeader>
-    <CardContent>
-     <div className='space-y-4'>
-      {recentExecutions.length === 0 ? (
-       <div className='text-center py-8'>
-        <div className='w-16 h-16 mx-auto bg-neutral-100 rounded-full flex items-center justify-center mb-4'>
-         <Activity className='h-8 w-8 text-neutral-400' />
-        </div>
-        <h3 className='text-lg font-medium text-neutral-900 mb-2'>
-         No Recent Activity
-        </h3>
-        <p className='text-neutral-600 mb-6'>
-         Execute some jobs to see activity here
-        </p>
-        <Link href='/jobs/new'>
-         <Button className='btn-primary'>
-          <Plus className='h-4 w-4 mr-2' />
-          Create Your First Job
-         </Button>
-        </Link>
-       </div>
-      ) : (
-       recentExecutions.map((execution) => {
-        const job = jobs.find((j) => j.id === execution.jobId);
-        return (
-         <div
-          key={execution.id}
-          className='flex items-center gap-4 p-4 bg-neutral-50 rounded-lg'
-         >
-          <div
-           className={`w-10 h-10 ${getStatusColor(
-            execution.status
-           )} rounded-full flex items-center justify-center`}
-          >
-           {getStatusIcon(execution.status)}
-          </div>
-          <div className='flex-1'>
-           <p className='font-medium text-neutral-900'>
-            {job?.name || `Job ${execution.jobId.slice(0, 8)}`}{' '}
-            {execution.status === 'success'
-             ? 'Completed'
-             : execution.status === 'failed'
-             ? 'Failed'
-             : execution.status === 'running'
-             ? 'Started'
-             : execution.status}
-           </p>
-           <p className='text-sm text-neutral-600'>
-            {execution.duration
-             ? `Duration: ${formatDuration(execution.duration)}`
-             : 'Running...'}
-            {execution.exitCode !== undefined &&
-             ` • Exit Code: ${execution.exitCode}`}
-           </p>
-          </div>
-          <span className='text-sm text-neutral-500'>
-           {formatTimeAgo(execution.startedAt)}
-          </span>
-         </div>
-        );
-       })
-      )}
-     </div>
-    </CardContent>
-   </Card>
+   {/* Recent Activity removed per design */}
 
    {/* Getting Started */}
    <Card className='card-gradient-primary'>
@@ -427,35 +279,39 @@ export default function DashboardPage() {
        <div className='w-12 h-12 mx-auto bg-primary-100 rounded-full flex items-center justify-center mb-3'>
         <span className='text-xl font-bold text-primary-600'>1</span>
        </div>
-       <h3 className='font-medium text-neutral-900 mb-2'>
-        Create Your First Job
-       </h3>
+       <h3 className='font-medium text-neutral-900 mb-2'>Install the SDK</h3>
        <p className='text-sm text-neutral-600'>
-        Set up a cron job to automate your tasks
+        Add @chronos-synapse/sdk to your application and register your jobs.
        </p>
       </div>
-
       <div className='text-center p-4'>
        <div className='w-12 h-12 mx-auto bg-secondary-100 rounded-full flex items-center justify-center mb-3'>
         <span className='text-xl font-bold text-secondary-600'>2</span>
        </div>
-       <h3 className='font-medium text-neutral-900 mb-2'>
-        Monitor Performance
-       </h3>
+       <h3 className='font-medium text-neutral-900 mb-2'>Report Executions</h3>
        <p className='text-sm text-neutral-600'>
-        Track execution times and success rates
+        Use enqueueExecution to report job runs and metrics.
        </p>
       </div>
-
       <div className='text-center p-4'>
        <div className='w-12 h-12 mx-auto bg-accent-green-100 rounded-full flex items-center justify-center mb-3'>
         <span className='text-xl font-bold text-accent-green-600'>3</span>
        </div>
-       <h3 className='font-medium text-neutral-900 mb-2'>Get AI Insights</h3>
+       <h3 className='font-medium text-neutral-900 mb-2'>View Analytics</h3>
        <p className='text-sm text-neutral-600'>
-        Optimize your jobs with intelligent analysis
+        Monitor health and performance here in real-time.
        </p>
       </div>
+     </div>
+     <div className='mt-6 flex items-center justify-center'>
+      <Link href='/api-keys'>
+       <Button
+        variant='outline'
+        className='border-orange-500 text-orange-600 hover:bg-orange-50'
+       >
+        View Docs/Setup
+       </Button>
+      </Link>
      </div>
     </CardContent>
    </Card>

@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { JobPerformanceMetrics, SystemPerformanceMetrics } from '@/types';
-import { useRealtime } from '@/contexts/RealtimeContext';
+import { useRealtime } from '@/contexts/PubSubContext';
 
 interface PerformanceDashboardProps {
  jobId?: string;
@@ -27,7 +27,7 @@ interface PerformanceDashboardProps {
 export default function PerformanceDashboard({
  jobId,
 }: PerformanceDashboardProps) {
- const { sseConnected } = useRealtime();
+ const { pubSubConnected } = useRealtime();
  const [systemMetrics, setSystemMetrics] =
   useState<SystemPerformanceMetrics | null>(null);
  const [jobMetrics, setJobMetrics] = useState<JobPerformanceMetrics | null>(
@@ -54,11 +54,11 @@ export default function PerformanceDashboard({
    }
   };
 
-  // Only fetch if WebSocket is connected (initial load)
-  if (sseConnected) {
+  // Only fetch if Pub/Sub is connected (initial load)
+  if (pubSubConnected) {
    fetchMetrics();
   }
- }, [jobId, timeRange, sseConnected]);
+ }, [jobId, timeRange, pubSubConnected]);
 
  const getTrendIcon = (trend: 'improving' | 'declining' | 'stable') => {
   switch (trend) {

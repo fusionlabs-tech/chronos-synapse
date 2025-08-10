@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { Notification } from '@/types';
-import { useToast } from '@/components/ui/Toast';
+import { useToast } from '@/components/ui/toast';
 import { useNotifications } from '@/contexts/NotificationContext';
 
 export default function NotificationDropdown() {

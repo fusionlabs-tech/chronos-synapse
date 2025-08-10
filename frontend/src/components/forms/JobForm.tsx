@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Job, JobFormData } from '@/types';
 import { apiClient } from '@/lib/api';
 import { isValidCronExpression } from '@/lib/utils';
-import { useToast } from '@/components/ui/Toast';
+import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,11 +24,17 @@ import {
 
 interface JobFormProps {
  job?: Job;
+ fileContent?: { filename: string; content: string; updatedAt: string } | null;
  onSuccess?: () => void;
  onCancel?: () => void;
 }
 
-export function JobForm({ job, onSuccess, onCancel }: JobFormProps) {
+export function JobForm({
+ job,
+ fileContent,
+ onSuccess,
+ onCancel,
+}: JobFormProps) {
  const { showToast } = useToast();
  const [formData, setFormData] = useState<JobFormData>({
   name: '',
@@ -40,6 +46,10 @@ export function JobForm({ job, onSuccess, onCancel }: JobFormProps) {
   retries: 3,
   tags: [],
   environment: {},
+  code: '',
+  language: 'python',
+  filename: 'main.py',
+  allowNetwork: false,
  });
 
  const [errors, setErrors] = useState<Record<string, string>>({});
@@ -51,6 +61,7 @@ export function JobForm({ job, onSuccess, onCancel }: JobFormProps) {
  // Initialize form with job data if editing
  useEffect(() => {
   console.log('JobForm received job prop:', job);
+  console.log('JobForm received fileContent prop:', fileContent);
   if (job) {
    const formDataToSet = {
     name: job.name,
@@ -62,11 +73,15 @@ export function JobForm({ job, onSuccess, onCancel }: JobFormProps) {
     retries: job.retries,
     tags: job.tags || [],
     environment: job.environment || {},
+    code: fileContent?.content || '',
+    language: job.language || 'python',
+    filename: fileContent?.filename || 'main.py',
+    allowNetwork: job.allowNetwork ?? false,
    };
    console.log('Setting form data:', formDataToSet);
    setFormData(formDataToSet);
   }
- }, [job]);
+ }, [job, fileContent]);
 
  const validateForm = (): boolean => {
   const newErrors: Record<string, string> = {};
@@ -87,10 +102,6 @@ export function JobForm({ job, onSuccess, onCancel }: JobFormProps) {
 
   if (formData.timeout < 1000) {
    newErrors.timeout = 'Timeout must be at least 1 second';
-  }
-
-  if (formData.retries < 0) {
-   newErrors.retries = 'Retries cannot be negative';
   }
 
   setErrors(newErrors);
@@ -482,6 +493,16 @@ export function JobForm({ job, onSuccess, onCancel }: JobFormProps) {
      <p className='text-red-600'>{errors.submit}</p>
     </div>
    )}
+
+   {/* Network toggle disclaimer */}
+   <div className='bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4'>
+    <p className='text-amber-800 text-sm'>
+     Network access is disabled by default for security. Enable “Allow network
+     egress” only for trusted jobs. No runtime package installation is allowed;
+     use language built-ins (e.g., Node https, Python urllib) or images with
+     built-in tools.
+    </p>
+   </div>
 
    {/* Actions */}
    <div className='flex justify-end space-x-4'>

@@ -6,20 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiClient } from '@/lib/api';
-import { useToast } from '@/components/ui/Toast';
-import {
- Key,
- Plus,
- Copy,
- Trash2,
- Eye,
- EyeOff,
- Activity,
- Shield,
- CheckCircle,
- AlertTriangle,
- Lock,
-} from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 
 interface ApiKey {
  id: string;
@@ -37,9 +24,7 @@ export default function ApiKeyManager() {
  const [loading, setLoading] = useState(true);
  const [creating, setCreating] = useState(false);
  const [showNewKey, setShowNewKey] = useState<string | null>(null);
- const [showKeys, setShowKeys] = useState<Set<string>>(new Set());
  const [newKeyName, setNewKeyName] = useState('');
- const [newKeyPermissions, setNewKeyPermissions] = useState<string[]>([]);
 
  useEffect(() => {
   fetchApiKeys();
@@ -67,10 +52,9 @@ export default function ApiKeyManager() {
 
   setCreating(true);
   try {
-   const response = await apiClient.createApiKey(newKeyName, newKeyPermissions);
+   const response = await apiClient.createApiKey(newKeyName);
    setShowNewKey(response.key);
    setNewKeyName('');
-   setNewKeyPermissions([]);
    await fetchApiKeys();
    showToast('API key created successfully', 'success');
   } catch (error) {
@@ -110,44 +94,6 @@ export default function ApiKeyManager() {
   }
  };
 
- const toggleKeyVisibility = (keyId: string) => {
-  const newShowKeys = new Set(showKeys);
-  if (newShowKeys.has(keyId)) {
-   newShowKeys.delete(keyId);
-  } else {
-   newShowKeys.add(keyId);
-  }
-  setShowKeys(newShowKeys);
- };
-
- const availablePermissions = [
-  { id: 'jobs:read', label: 'Read Jobs', description: 'View and list jobs' },
-  {
-   id: 'jobs:write',
-   label: 'Create Jobs',
-   description: 'Create and update jobs',
-  },
-  { id: 'jobs:delete', label: 'Delete Jobs', description: 'Delete jobs' },
-  {
-   id: 'executions:read',
-   label: 'Read Executions',
-   description: 'View job executions',
-  },
-  {
-   id: 'analytics:read',
-   label: 'Read Analytics',
-   description: 'Access analytics data',
-  },
- ];
-
- const togglePermission = (permission: string) => {
-  setNewKeyPermissions((prev) =>
-   prev.includes(permission)
-    ? prev.filter((p) => p !== permission)
-    : [...prev, permission]
-  );
- };
-
  if (loading) {
   return (
    <div className='flex items-center justify-center h-64'>
@@ -159,16 +105,11 @@ export default function ApiKeyManager() {
  return (
   <div className='max-w-7xl mx-auto space-y-8'>
    {/* Page Header */}
-   <div className='text-center space-y-4'>
-    <div className='page-header-icon'>
-     <Key className='h-10 w-10 text-white' />
-    </div>
-    <div>
-     <h1 className='page-header-title'>API Key Management</h1>
-     <p className='text-neutral-600 mt-2 text-lg'>
-      Create and manage API keys for programmatic access to Chronos Synapse
-     </p>
-    </div>
+   <div className='text-center space-y-2'>
+    <h1 className='page-header-title'>API Keys</h1>
+    <p className='text-neutral-600 text-lg'>
+     Create and manage API keys for Chronos SDK ingestion
+    </p>
    </div>
 
    <div className='grid grid-cols-1 lg:grid-cols-3 gap-8'>
@@ -177,12 +118,7 @@ export default function ApiKeyManager() {
      {/* Create New API Key */}
      <Card className='card-gradient-primary'>
       <CardHeader className='pb-6'>
-       <CardTitle className='flex items-center gap-3 text-xl'>
-        <div className='icon-container-primary'>
-         <Plus className='h-5 w-5' />
-        </div>
-        Create New API Key
-       </CardTitle>
+       <CardTitle className='text-xl'>Create API Key</CardTitle>
       </CardHeader>
       <CardContent>
        <form onSubmit={handleCreateApiKey} className='space-y-6'>
@@ -203,41 +139,11 @@ export default function ApiKeyManager() {
          />
         </div>
 
-        <div className='space-y-3'>
-         <Label className='text-sm font-medium text-neutral-700'>
-          Permissions
-         </Label>
-         <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
-          {availablePermissions.map((permission) => (
-           <label
-            key={permission.id}
-            className='flex items-start space-x-3 p-3 border border-neutral-200 rounded-lg hover:bg-neutral-50 cursor-pointer transition-colors'
-           >
-            <input
-             type='checkbox'
-             checked={newKeyPermissions.includes(permission.id)}
-             onChange={() => togglePermission(permission.id)}
-             className='mt-1 h-4 w-4 text-primary-600 focus:ring-primary-500 border-neutral-300 rounded'
-            />
-            <div className='flex-1'>
-             <div className='text-sm font-medium text-neutral-900'>
-              {permission.label}
-             </div>
-             <div className='text-xs text-neutral-500'>
-              {permission.description}
-             </div>
-            </div>
-           </label>
-          ))}
-         </div>
-        </div>
-
         <Button
          type='submit'
          disabled={creating || !newKeyName.trim()}
-         className='btn-primary flex items-center gap-2'
+         className='btn-primary'
         >
-         <Key className='h-4 w-4' />
          {creating ? 'Creating...' : 'Create API Key'}
         </Button>
        </form>
@@ -247,19 +153,13 @@ export default function ApiKeyManager() {
      {/* API Keys List */}
      <Card className='card-primary'>
       <CardHeader className='pb-6'>
-       <CardTitle className='flex items-center gap-3 text-xl'>
-        <div className='icon-container-blue'>
-         <Shield className='h-5 w-5' />
-        </div>
+       <CardTitle className='text-xl'>
         Your API Keys ({apiKeys.length})
        </CardTitle>
       </CardHeader>
       <CardContent>
        {apiKeys.length === 0 ? (
         <div className='text-center py-12'>
-         <div className='w-16 h-16 mx-auto bg-neutral-100 rounded-full flex items-center justify-center mb-4'>
-          <Key className='h-8 w-8 text-neutral-400' />
-         </div>
          <h3 className='text-lg font-medium text-neutral-900 mb-2'>
           No API Keys Yet
          </h3>
@@ -296,30 +196,11 @@ export default function ApiKeyManager() {
                </Label>
                <div className='flex items-center gap-2 mt-1'>
                 <code className='flex-1 px-3 py-2 bg-neutral-100 rounded-lg text-sm font-mono'>
-                 {showKeys.has(apiKey.id)
-                  ? apiKey.key
-                  : '••••••••••••••••••••••••••••••••'}
+                 ••••••••••••••••••••••••••••••••
                 </code>
-                <Button
-                 variant='outline'
-                 size='sm'
-                 onClick={() => toggleKeyVisibility(apiKey.id)}
-                 className='btn-secondary flex items-center gap-1'
-                >
-                 {showKeys.has(apiKey.id) ? (
-                  <EyeOff className='h-4 w-4' />
-                 ) : (
-                  <Eye className='h-4 w-4' />
-                 )}
-                </Button>
-                <Button
-                 variant='outline'
-                 size='sm'
-                 onClick={() => copyToClipboard(apiKey.key)}
-                 className='btn-secondary flex items-center gap-1'
-                >
-                 <Copy className='h-4 w-4' />
-                </Button>
+               </div>
+               <div className='text-xs text-neutral-500 mt-1'>
+                For security reasons, keys are only shown once on creation.
                </div>
               </div>
 
@@ -368,9 +249,9 @@ export default function ApiKeyManager() {
              variant='outline'
              size='sm'
              onClick={() => handleDeleteApiKey(apiKey.id)}
-             className='btn-danger flex items-center gap-1'
+             className='btn-danger'
             >
-             <Trash2 className='h-4 w-4' />
+             Delete
             </Button>
            </div>
           </div>
@@ -386,10 +267,7 @@ export default function ApiKeyManager() {
      {/* Usage Stats */}
      <Card className='card-gradient-blue'>
       <CardHeader className='pb-4'>
-       <CardTitle className='flex items-center gap-2 text-lg'>
-        <Activity className='h-5 w-5 text-accent-blue-600' />
-        Usage Stats
-       </CardTitle>
+       <CardTitle className='text-lg'>Usage Stats</CardTitle>
       </CardHeader>
       <CardContent className='space-y-4'>
        <div className='flex items-center justify-between'>
@@ -434,7 +312,7 @@ export default function ApiKeyManager() {
          <div>
           <p className='text-sm font-medium text-neutral-900'>Create API Key</p>
           <p className='text-xs text-neutral-600'>
-           Generate a new key with specific permissions
+           Generate a new key for ingestion
           </p>
          </div>
         </div>
@@ -445,7 +323,7 @@ export default function ApiKeyManager() {
          <div>
           <p className='text-sm font-medium text-neutral-900'>Copy Key</p>
           <p className='text-xs text-neutral-600'>
-           Copy the key to use in your applications
+           Store securely in your environment variables
           </p>
          </div>
         </div>
@@ -456,7 +334,7 @@ export default function ApiKeyManager() {
          <div>
           <p className='text-sm font-medium text-neutral-900'>Use in Code</p>
           <p className='text-xs text-neutral-600'>
-           Include in Authorization header
+           Send it as x-api-key with the SDK
           </p>
          </div>
         </div>
@@ -467,29 +345,17 @@ export default function ApiKeyManager() {
      {/* Security Tips */}
      <Card className='card-gradient-orange'>
       <CardHeader className='pb-4'>
-       <CardTitle className='flex items-center gap-2 text-lg'>
-        <AlertTriangle className='h-5 w-5 text-accent-orange-600' />
-        Security Tips
-       </CardTitle>
+       <CardTitle className='text-lg'>Security Tips</CardTitle>
       </CardHeader>
-      <CardContent className='space-y-3'>
-       <div className='flex items-start gap-2 text-sm'>
-        <Lock className='h-4 w-4 text-accent-orange-600 mt-0.5 flex-shrink-0' />
-        <p className='text-neutral-700'>
-         Keep your API keys secure and never share them publicly
-        </p>
+      <CardContent className='space-y-3 text-sm text-neutral-700'>
+       <div className='flex items-start gap-2'>
+        <p>Keep your API keys secure and never share them publicly</p>
        </div>
-       <div className='flex items-start gap-2 text-sm'>
-        <Shield className='h-4 w-4 text-accent-orange-600 mt-0.5 flex-shrink-0' />
-        <p className='text-neutral-700'>
-         Use environment variables to store keys in production
-        </p>
+       <div className='flex items-start gap-2'>
+        <p>Use environment variables to store keys in production</p>
        </div>
-       <div className='flex items-start gap-2 text-sm'>
-        <Trash2 className='h-4 w-4 text-accent-orange-600 mt-0.5 flex-shrink-0' />
-        <p className='text-neutral-700'>
-         Delete unused keys to minimize security risks
-        </p>
+       <div className='flex items-start gap-2'>
+        <p>Delete unused keys to minimize security risks</p>
        </div>
       </CardContent>
      </Card>
@@ -501,9 +367,6 @@ export default function ApiKeyManager() {
     <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4'>
      <div className='bg-white rounded-xl p-6 max-w-md w-full'>
       <div className='text-center space-y-4'>
-       <div className='w-16 h-16 mx-auto bg-accent-green-100 rounded-full flex items-center justify-center'>
-        <CheckCircle className='h-8 w-8 text-accent-green-600' />
-       </div>
        <h3 className='text-xl font-semibold text-neutral-900'>
         API Key Created!
        </h3>
@@ -519,7 +382,6 @@ export default function ApiKeyManager() {
          onClick={() => copyToClipboard(showNewKey)}
          className='btn-success w-full'
         >
-         <Copy className='h-4 w-4 mr-2' />
          Copy to Clipboard
         </Button>
        </div>

@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api';
 import { User } from '@/types';
-import { useToast } from '@/components/ui/Toast';
+import { useToast } from '@/components/ui/toast';
+import { useRealtime } from '@/contexts/PubSubContext';
 import RateLimitManager from '@/components/admin/RateLimitManager';
 import {
  Shield,
@@ -33,10 +34,19 @@ export default function AdminPage() {
   'overview' | 'users' | 'rate-limits'
  >('overview');
  const { showToast } = useToast();
+ const { dashboardStats } = useRealtime();
 
  useEffect(() => {
   fetchAdminData();
  }, []);
+
+ // Real-time updates for admin page
+ useEffect(() => {
+  if (dashboardStats) {
+   // Refresh admin data when dashboard stats change
+   fetchAdminData();
+  }
+ }, [dashboardStats]);
 
  const fetchAdminData = async () => {
   try {
@@ -106,9 +116,9 @@ export default function AdminPage() {
 
  // Tab navigation
  const tabs = [
-  { id: 'overview', label: 'Overview', icon: BarChart3 },
-  { id: 'users', label: 'User Management', icon: Users },
-  { id: 'rate-limits', label: 'Rate Limits', icon: Shield },
+  { id: 'overview', label: 'Overview' },
+  { id: 'users', label: 'User Management' },
+  { id: 'rate-limits', label: 'Rate Limits' },
  ];
 
  const renderTabContent = () => {
@@ -121,64 +131,44 @@ export default function AdminPage() {
        <div className='grid grid-cols-1 md:grid-cols-4 gap-6'>
         <Card className='card-primary'>
          <CardContent className='p-6'>
-          <div className='flex items-center justify-between'>
-           <div>
-            <p className='text-sm font-medium text-neutral-600'>Total Users</p>
-            <p className='text-2xl font-bold text-neutral-900'>
-             {systemStats.totalUsers}
-            </p>
-           </div>
-           <div className='icon-container-primary'>
-            <Users className='h-5 w-5' />
-           </div>
+          <div>
+           <p className='text-sm font-medium text-neutral-600'>Total Users</p>
+           <p className='text-2xl font-bold text-neutral-900'>
+            {systemStats.totalUsers}
+           </p>
           </div>
          </CardContent>
         </Card>
 
         <Card className='card-primary'>
          <CardContent className='p-6'>
-          <div className='flex items-center justify-between'>
-           <div>
-            <p className='text-sm font-medium text-neutral-600'>Active Users</p>
-            <p className='text-2xl font-bold text-accent-green-600'>
-             {systemStats.activeUsers}
-            </p>
-           </div>
-           <div className='icon-container-green'>
-            <CheckCircle className='h-5 w-5' />
-           </div>
+          <div>
+           <p className='text-sm font-medium text-neutral-600'>Active Users</p>
+           <p className='text-2xl font-bold text-accent-green-600'>
+            {systemStats.activeUsers}
+           </p>
           </div>
          </CardContent>
         </Card>
 
         <Card className='card-primary'>
          <CardContent className='p-6'>
-          <div className='flex items-center justify-between'>
-           <div>
-            <p className='text-sm font-medium text-neutral-600'>Total Jobs</p>
-            <p className='text-2xl font-bold text-primary-600'>
-             {systemStats.totalJobs}
-            </p>
-           </div>
-           <div className='icon-container-blue'>
-            <Zap className='h-5 w-5' />
-           </div>
+          <div>
+           <p className='text-sm font-medium text-neutral-600'>Total Jobs</p>
+           <p className='text-2xl font-bold text-primary-600'>
+            {systemStats.totalJobs}
+           </p>
           </div>
          </CardContent>
         </Card>
 
         <Card className='card-primary'>
          <CardContent className='p-6'>
-          <div className='flex items-center justify-between'>
-           <div>
-            <p className='text-sm font-medium text-neutral-600'>Success Rate</p>
-            <p className='text-2xl font-bold text-accent-green-600'>
-             {systemStats.systemSuccessRate.toFixed(1)}%
-            </p>
-           </div>
-           <div className='icon-container-green'>
-            <Activity className='h-5 w-5' />
-           </div>
+          <div>
+           <p className='text-sm font-medium text-neutral-600'>Success Rate</p>
+           <p className='text-2xl font-bold text-accent-green-600'>
+            {systemStats.systemSuccessRate.toFixed(1)}%
+           </p>
           </div>
          </CardContent>
         </Card>
@@ -189,10 +179,7 @@ export default function AdminPage() {
       {systemStats?.recentActivity && (
        <Card className='card-primary'>
         <CardHeader>
-         <CardTitle className='flex items-center gap-2'>
-          <Activity className='h-5 w-5' />
-          Recent Activity
-         </CardTitle>
+         <CardTitle>Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
          <div className='space-y-4'>
@@ -224,10 +211,7 @@ export default function AdminPage() {
       <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>
        <Card className='card-primary'>
         <CardHeader>
-         <CardTitle className='flex items-center gap-2'>
-          <CheckCircle className='h-5 w-5' />
-          System Status
-         </CardTitle>
+         <CardTitle>System Status</CardTitle>
         </CardHeader>
         <CardContent>
          <div className='space-y-4'>
@@ -271,10 +255,7 @@ export default function AdminPage() {
 
        <Card className='card-primary'>
         <CardHeader>
-         <CardTitle className='flex items-center gap-2'>
-          <Calendar className='h-5 w-5' />
-          Quick Actions
-         </CardTitle>
+         <CardTitle>Quick Actions</CardTitle>
         </CardHeader>
         <CardContent>
          <div className='space-y-4'>
@@ -346,7 +327,11 @@ export default function AdminPage() {
              <td className='py-3 px-4'>
               <div>
                <div className='font-medium text-neutral-900'>
-                {user.firstName} {user.lastName}
+                {user.firstName && user.lastName
+                 ? `${user.firstName} ${user.lastName}`
+                 : user.firstName
+                 ? user.firstName
+                 : user.username}
                </div>
                <div className='text-sm text-neutral-500'>{user.email}</div>
                <div className='text-xs text-neutral-400'>@{user.username}</div>
@@ -445,7 +430,6 @@ export default function AdminPage() {
    <div className='border-b border-neutral-200'>
     <nav className='flex space-x-8'>
      {tabs.map((tab) => {
-      const Icon = tab.icon;
       return (
        <button
         key={tab.id}
@@ -456,7 +440,6 @@ export default function AdminPage() {
           : 'border-transparent text-neutral-500 hover:text-neutral-700 hover:border-neutral-300'
         }`}
        >
-        <Icon className='h-4 w-4' />
         {tab.label}
        </button>
       );

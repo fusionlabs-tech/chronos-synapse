@@ -45,19 +45,47 @@ class ApiClient {
    ...options,
   });
 
-  // Handle token expiration
+  // Handle token expiration - try to refresh first
   if (response.status === 401) {
-   // Store current path for redirect after login
-   const currentPath = window.location.pathname + window.location.search;
-   if (currentPath !== '/auth/login' && currentPath !== '/auth/register') {
-    sessionStorage.setItem('redirectAfterLogin', currentPath);
+   const refreshToken = localStorage.getItem('refresh_token');
+
+   if (refreshToken) {
+    try {
+     // Try to refresh the token
+     const refreshResponse = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+     });
+
+     if (refreshResponse.ok) {
+      const refreshData = await refreshResponse.json();
+      localStorage.setItem('auth_token', refreshData.token);
+
+      // Retry the original request with new token
+      const retryResponse = await fetch(url, {
+       headers: {
+        ...headers,
+        Authorization: `Bearer ${refreshData.token}`,
+       },
+       ...options,
+      });
+
+      if (retryResponse.ok) {
+       return retryResponse.json();
+      }
+     }
+    } catch (refreshError) {
+     // Refresh failed, clear tokens and let modal handle it
+     localStorage.removeItem('auth_token');
+     localStorage.removeItem('refresh_token');
+     throw new Error('Unauthorized - Token expired');
+    }
    }
 
-   // Clear auth data
+   // No refresh token or refresh failed - clear auth data
    localStorage.removeItem('auth_token');
-
-   // Redirect to login
-   window.location.href = '/auth/login';
+   localStorage.removeItem('refresh_token');
    throw new Error('Unauthorized - Token expired');
   }
 
@@ -90,12 +118,38 @@ class ApiClient {
   const queryString = params.toString();
   const endpoint = `/jobs${queryString ? `?${queryString}` : ''}`;
 
-  return this.request<JobsResponse>(endpoint);
+  type Wrapped = { success?: boolean; data?: JobsResponse };
+  const raw = await this.request<JobsResponse | Wrapped>(endpoint);
+  // Normalize response: support both { jobs, pagination } and { success, data: { jobs, pagination } }
+  if ((raw as JobsResponse)?.jobs) return raw as JobsResponse;
+  if ((raw as Wrapped)?.data?.jobs) {
+   const d = (raw as Wrapped).data as JobsResponse;
+   return { jobs: d.jobs, pagination: d.pagination, view: d.view };
+  }
+  return { jobs: [] } as JobsResponse;
  }
 
- async getJob(jobId: string): Promise<Job> {
-  const response = await this.request<{ job: Job }>(`/jobs/${jobId}`);
-  return response.job;
+ async getJob(jobId: string): Promise<{
+  job: Job;
+  fileContent?: { filename: string; content: string; updatedAt: string } | null;
+ }> {
+  type Wrapped = { success?: boolean; data?: Job };
+  const raw = await this.request<
+   | {
+      job: Job;
+      fileContent?: {
+       filename: string;
+       content: string;
+       updatedAt: string;
+      } | null;
+     }
+   | Wrapped
+  >(`/jobs/${jobId}`);
+  if ((raw as any)?.job) return raw as any;
+  if ((raw as Wrapped)?.data) {
+   return { job: (raw as Wrapped).data as Job };
+  }
+  throw new Error('Invalid job response');
  }
 
  async createJob(jobData: JobFormData): Promise<Job> {
@@ -138,14 +192,24 @@ class ApiClient {
 
  // Execution endpoints
  async getJobExecutions(jobId: string, limit = 10): Promise<JobExecution[]> {
-  const response = await this.request<{ executions: JobExecution[] }>(
+  type Wrapped = { success?: boolean; data?: JobExecution[] };
+  const raw = await this.request<{ executions: JobExecution[] } | Wrapped>(
    `/jobs/${jobId}/executions?limit=${limit}`
   );
-  return response.executions;
+  if ((raw as any)?.executions)
+   return (raw as any).executions as JobExecution[];
+  if ((raw as Wrapped)?.data) return (raw as Wrapped).data as JobExecution[];
+  return [];
  }
 
  async getExecution(jobId: string, executionId: string): Promise<JobExecution> {
-  return this.request<JobExecution>(`/jobs/${jobId}/executions/${executionId}`);
+  const endpoint = `/jobs/${encodeURIComponent(
+   jobId
+  )}/executions/${encodeURIComponent(executionId)}`;
+  type Wrapped = { success?: boolean; data?: JobExecution };
+  const raw = await this.request<JobExecution | Wrapped>(endpoint);
+  if ((raw as Wrapped)?.data) return (raw as Wrapped).data as JobExecution;
+  return raw as JobExecution;
  }
 
  async getJobStatus(jobId: string): Promise<{
@@ -173,19 +237,20 @@ class ApiClient {
   return this.request(`/analytics/performance?days=${days}`);
  }
 
- async getExecutionLogs(
-  jobId: string,
-  executionId: string,
-  limit = 100
- ): Promise<{ logs: any[] }> {
-  return this.request<{ logs: any[] }>(
-   `/jobs/${jobId}/executions/${executionId}/logs?limit=${limit}`
-  );
- }
-
  // Metrics endpoints
- async getDashboardStats(): Promise<DashboardStats> {
-  return this.request<DashboardStats>('/analytics/dashboard');
+ async getDashboardStats(days: number = 1): Promise<DashboardStats> {
+  type Wrapped = { success?: boolean; data?: any };
+  const raw = await this.request<DashboardStats | Wrapped>(
+   `/analytics/dashboard?days=${encodeURIComponent(String(days))}`
+  );
+  const src: any = (raw as any)?.data ? (raw as any).data : raw;
+  return {
+   totalJobs: Number(src?.totalJobs ?? 0),
+   activeJobs: Number(src?.activeJobs ?? 0),
+   recentExecutions: Number(src?.recentExecutions ?? src?.totalExecutions ?? 0),
+   successRate: Number(src?.successRate ?? 0),
+   avgDuration: Number(src?.avgDuration ?? src?.averageExecutionTime ?? 0),
+  } as DashboardStats;
  }
 
  async getMetrics(
@@ -194,12 +259,62 @@ class ApiClient {
   toTimestamp: number
  ): Promise<MetricsData[]> {
   const params = new URLSearchParams({
-   metric,
    from: fromTimestamp.toString(),
    to: toTimestamp.toString(),
   });
+  const safeMetric = encodeURIComponent(metric);
+  const raw = await this.request<any>(
+   `/analytics/timeseries/${safeMetric}?${params}`
+  );
+  const arr: any[] = Array.isArray(raw?.data)
+   ? raw.data
+   : Array.isArray(raw)
+   ? raw
+   : [];
+  return arr.map((tuple) => {
+   if (Array.isArray(tuple) && tuple.length >= 2) {
+    return {
+     timestamp: Number(tuple[0]),
+     value: Number(tuple[1]),
+    } as MetricsData;
+   }
+   // Fallback if backend ever returns objects
+   return {
+    timestamp: Number((tuple as any)?.timestamp),
+    value: Number((tuple as any)?.value),
+   } as MetricsData;
+  });
+ }
 
-  return this.request<MetricsData[]>(`/analytics/metrics?${params}`);
+ async getUserTimeseries(days: number): Promise<{
+  executions: MetricsData[];
+  success: MetricsData[];
+  failed: MetricsData[];
+ }> {
+  const raw = await this.request<{
+   success: boolean;
+   data: {
+    executions: Array<[number, number]>;
+    success: Array<[number, number]>;
+    failed: Array<[number, number]>;
+   };
+  }>(`/analytics/user-timeseries?days=${encodeURIComponent(String(days))}`);
+  const mapTuples = (arr: Array<[number, number]>): MetricsData[] =>
+   arr.map(([t, v]) => ({ timestamp: Number(t), value: Number(v) }));
+  const data = raw?.data || { executions: [], success: [], failed: [] };
+  return {
+   executions: mapTuples(data.executions || []),
+   success: mapTuples(data.success || []),
+   failed: mapTuples(data.failed || []),
+  };
+ }
+
+ async getRecentExecutions(days = 1, limit = 10): Promise<JobExecution[]> {
+  const qs = new URLSearchParams({ days: String(days), limit: String(limit) });
+  const raw = await this.request<{ success: boolean; data: JobExecution[] }>(
+   `/analytics/recent?${qs}`
+  );
+  return raw?.data || [];
  }
 
  // Health endpoints
@@ -211,22 +326,19 @@ class ApiClient {
   return this.request<{ status: string }>('/health');
  }
 
- // Demo endpoints
- async createSampleJobs(): Promise<{ message: string; count: number }> {
-  return this.request<{ message: string; count: number }>(
-   '/demo/create-sample-jobs',
-   {
-    method: 'POST',
-   }
-  );
- }
-
  // AI Analysis endpoints
  async performComprehensiveAnalysis(jobId: string): Promise<AIAnalysisResult> {
-  return this.request<AIAnalysisResult>(`/ai/analyze-job/${jobId}`, {
+  const raw = await this.request<
+   AIAnalysisResult | { success?: boolean; data?: AIAnalysisResult }
+  >(`/ai/analyze-job/${jobId}`, {
    method: 'POST',
    body: JSON.stringify({}),
   });
+  const wrapped = raw as any;
+  if (wrapped && typeof wrapped === 'object' && wrapped.data) {
+   return wrapped.data as AIAnalysisResult;
+  }
+  return raw as AIAnalysisResult;
  }
 
  async detectAnomalies(
@@ -278,6 +390,17 @@ class ApiClient {
   return this.request<{ analyses: AIAnalysisResult[] }>('/ai/analyses');
  }
 
+ async analyzeCode(codeData: {
+  code: string;
+  language: string;
+  context?: any;
+ }): Promise<any> {
+  return this.request('/jobs/analyze-code', {
+   method: 'POST',
+   body: JSON.stringify(codeData),
+  });
+ }
+
  // User Profile Management
  async updateProfile(profileData: {
   firstName?: string;
@@ -285,19 +408,9 @@ class ApiClient {
   username?: string;
   email?: string;
  }): Promise<User> {
-  return this.request<User>('/users/profile', {
+  return this.request<User>('/auth/profile', {
    method: 'PUT',
    body: JSON.stringify(profileData),
-  });
- }
-
- async changePassword(
-  currentPassword: string,
-  newPassword: string
- ): Promise<{ success: boolean }> {
-  return this.request<{ success: boolean }>('/users/change-password', {
-   method: 'POST',
-   body: JSON.stringify({ currentPassword, newPassword }),
   });
  }
 
@@ -316,10 +429,7 @@ class ApiClient {
   return this.request('/users/api-keys');
  }
 
- async createApiKey(
-  name: string,
-  permissions: string[] = []
- ): Promise<{
+ async createApiKey(name: string): Promise<{
   id: string;
   key: string;
   name: string;
@@ -327,7 +437,7 @@ class ApiClient {
  }> {
   return this.request('/users/api-keys', {
    method: 'POST',
-   body: JSON.stringify({ name, permissions }),
+   body: JSON.stringify({ name }),
   });
  }
 

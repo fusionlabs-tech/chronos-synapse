@@ -10,6 +10,9 @@ export interface User {
  lastLoginAt?: string;
  createdAt: string;
  updatedAt: string;
+ oauthProvider?: 'GOOGLE' | 'GITHUB';
+ emailVerified?: boolean;
+ avatar?: string; // Optional profile image URL
 }
 
 // Notification types
@@ -47,15 +50,18 @@ export interface Job {
  command: string;
  enabled: boolean;
  timeout: number;
- retries: number;
+ retries?: number; // Made optional - will be implemented in future
  userId: string;
  teamId?: string;
  tags: string[];
  environment?: Record<string, string>;
+ language?: string;
  createdAt: string;
  updatedAt: string;
  lastRun?: string;
  nextRun?: string;
+ allowNetwork?: boolean;
+ runMode?: 'once' | 'recurring';
 }
 
 export interface JobExecution {
@@ -68,10 +74,13 @@ export interface JobExecution {
  exitCode?: number;
  output?: string;
  error?: string;
- retryCount?: number;
- maxRetries?: number;
- lastError?: string;
- errorCount?: number;
+ isCompleted?: boolean; // New field to track completion status
+ stdout?: string;
+ stderr?: string;
+ // retryCount?: number; // Removed - will be implemented in future
+ // maxRetries?: number; // Removed - will be implemented in future
+ // lastError?: string; // Removed - will be implemented in future
+ // errorCount?: number; // Removed - will be implemented in future
 }
 
 export interface JobPerformanceMetrics {
@@ -210,9 +219,13 @@ export interface JobFormData {
  command: string;
  enabled: boolean;
  timeout: number;
- retries: number;
+ retries?: number; // Made optional - will be implemented in future
  tags: string[];
  environment?: Record<string, string>;
+ code?: string;
+ language?: string;
+ filename?: string;
+ allowNetwork?: boolean;
 }
 
 // Filter and search types
