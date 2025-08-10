@@ -32,11 +32,16 @@ jobs:
    - name: Install dependencies
      run: npm ci
 
-   - name: Set package version from tag
+   - name: Set package version from tag (skip if same)
      run: |
       VERSION="${GITHUB_REF_NAME#sdk-v}"
-      echo "Version from tag: $VERSION"
-      npm version "$VERSION" --no-git-tag-version
+      CURRENT=$(node -p "require('./package.json').version")
+      echo "Version from tag: $VERSION (current: $CURRENT)"
+      if [ "$CURRENT" != "$VERSION" ]; then
+        npm version "$VERSION" --no-git-tag-version
+      else
+        echo "Version unchanged; skipping bump"
+      fi
 
    - name: Build
      run: npm run build
