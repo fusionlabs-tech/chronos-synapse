@@ -28,7 +28,18 @@ export class PubSubService {
 
   this.io = new SocketIOServer(fastify.server, {
    cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: (
+     origin: string | undefined,
+     cb: (err: Error | null, allow?: boolean) => void
+    ) => {
+     const allowed = new Set([
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+     ]);
+     if (!origin || allowed.has(origin)) cb(null, true);
+     else cb(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST'],
    },

@@ -23,10 +23,32 @@ const fastify = Fastify({
 
 // Register plugins
 fastify.register(cors, {
- origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+ origin: (origin, cb) => {
+  const allowed = new Set([
+   process.env.FRONTEND_URL || 'http://localhost:3000',
+   'http://localhost:3000',
+   'http://127.0.0.1:3000',
+   'http://localhost:3001',
+   'http://127.0.0.1:3001',
+  ]);
+  if (!origin || allowed.has(origin)) {
+   cb(null, true);
+  } else {
+   cb(null, false);
+  }
+ },
  credentials: true,
- methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
- allowedHeaders: ['Content-Type', 'Authorization'],
+ methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+ allowedHeaders: [
+  'Content-Type',
+  'Authorization',
+  'authorization',
+  'Accept',
+  'X-Requested-With',
+ ],
+ exposedHeaders: ['Content-Length', 'Content-Type'],
+ preflightContinue: false,
+ optionsSuccessStatus: 204,
 });
 
 // Register all modules
