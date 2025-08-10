@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { apiClient } from '@/lib/api';
 import { Job, AIAnalysisResult } from '@/types';
-import { useToast } from '@/components/ui/Toast';
+import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -25,7 +25,7 @@ function AIInsightsContent() {
  // Auto-select job if jobId is provided in URL
  useEffect(() => {
   const jobId = searchParams.get('jobId');
-  if (jobId && jobs.length > 0) {
+  if (jobId && jobs && jobs.length > 0) {
    const job = jobs.find((j) => j.id === jobId);
    if (job) {
     setSelectedJob(job);
@@ -37,10 +37,25 @@ function AIInsightsContent() {
   try {
    setLoading(true);
    const response = await apiClient.getJobs();
-   setJobs(response.jobs);
+
+   // Handle the response structure - check if it's wrapped or direct
+   let jobs: Job[] = [];
+   if (response && typeof response === 'object') {
+    const responseObj = response as any;
+    if (responseObj.data && responseObj.data.jobs) {
+     // Wrapped response: { success: true, data: { jobs: [...] } }
+     jobs = Array.isArray(responseObj.data.jobs) ? responseObj.data.jobs : [];
+    } else if (responseObj.jobs) {
+     // Direct response: { jobs: [...] }
+     jobs = Array.isArray(responseObj.jobs) ? responseObj.jobs : [];
+    }
+   }
+
+   setJobs(jobs);
   } catch (error) {
    console.error('Failed to fetch jobs:', error);
    showToast('Failed to load jobs', 'error');
+   setJobs([]);
   } finally {
    setLoading(false);
   }
@@ -62,15 +77,17 @@ function AIInsightsContent() {
 
  // Filter jobs based on search query
  const filteredJobs = useMemo(() => {
+  if (!jobs || !Array.isArray(jobs)) return [];
   if (!searchQuery.trim()) return jobs;
 
   const query = searchQuery.toLowerCase();
   return jobs.filter(
    (job) =>
-    job.name.toLowerCase().includes(query) ||
-    job.description?.toLowerCase().includes(query) ||
-    job.tags?.some((tag) => tag.toLowerCase().includes(query)) ||
-    job.schedule.toLowerCase().includes(query)
+    (job.name || '').toLowerCase().includes(query) ||
+    (job.description || '').toLowerCase().includes(query) ||
+    (Array.isArray(job.tags) &&
+     job.tags.some((tag) => (tag || '').toLowerCase().includes(query))) ||
+    (job.schedule || '').toLowerCase().includes(query)
   );
  }, [jobs, searchQuery]);
 
@@ -94,7 +111,7 @@ function AIInsightsContent() {
  };
 
  const getJobType = (job: Job) => {
-  const command = job.command.toLowerCase();
+  const command = String((job as any)?.command || '').toLowerCase();
   if (command.includes('backup') || command.includes('dump')) return 'backup';
   if (command.includes('clean') || command.includes('cleanup'))
    return 'cleanup';
@@ -137,16 +154,11 @@ function AIInsightsContent() {
  return (
   <div className='max-w-7xl mx-auto space-y-8'>
    {/* Page Header */}
-   <div className='text-center space-y-4'>
-    <div className='page-header-icon'>
-     <span className='text-3xl'>🤖</span>
-    </div>
-    <div>
-     <h1 className='page-header-title'>AI Insights</h1>
-     <p className='text-neutral-600 mt-2 text-lg'>
-      Get intelligent analysis and recommendations for your cron jobs
-     </p>
-    </div>
+   <div className='text-center space-y-2'>
+    <h1 className='page-header-title'>AI Insights</h1>
+    <p className='text-neutral-600 text-lg'>
+     Automated analysis and recommendations for your jobs
+    </p>
    </div>
 
    <div className='grid grid-cols-1 lg:grid-cols-3 gap-8'>
@@ -172,7 +184,7 @@ function AIInsightsContent() {
 
        {/* Job List */}
        <div className='space-y-3 max-h-96 overflow-y-auto'>
-        {filteredJobs.length === 0 ? (
+        {!filteredJobs || filteredJobs.length === 0 ? (
          <div className='text-center py-8 text-neutral-500'>
           <span className='text-2xl mb-2 block'>🔍</span>
           <p>No jobs found</p>
@@ -201,7 +213,7 @@ function AIInsightsContent() {
                </h3>
               </div>
               <p className='text-sm text-neutral-600 mb-2'>{job.schedule}</p>
-              {job.tags && job.tags.length > 0 && (
+              {job.tags && Array.isArray(job.tags) && job.tags.length > 0 && (
                <div className='flex flex-wrap gap-1'>
                 {job.tags.slice(0, 2).map((tag, index) => (
                  <span
@@ -263,15 +275,19 @@ function AIInsightsContent() {
           <div className='p-4 bg-neutral-50 rounded-lg'>
            <div className='text-sm text-neutral-500 mb-1'>Schedule</div>
            <div className='font-medium text-neutral-900'>
-            {selectedJob.schedule}
+            {selectedJob.schedule && selectedJob.schedule.trim() !== ''
+             ? selectedJob.schedule
+             : 'One-time'}
            </div>
           </div>
-          <div className='p-4 bg-neutral-50 rounded-lg'>
-           <div className='text-sm text-neutral-500 mb-1'>Command</div>
-           <div className='font-mono text-sm text-neutral-900 truncate'>
-            {selectedJob.command}
+          {Boolean((selectedJob as any)?.command) && (
+           <div className='p-4 bg-neutral-50 rounded-lg'>
+            <div className='text-sm text-neutral-500 mb-1'>Command</div>
+            <div className='font-mono text-sm text-neutral-900 truncate'>
+             {(selectedJob as any).command}
+            </div>
            </div>
-          </div>
+          )}
           <div className='p-4 bg-neutral-50 rounded-lg'>
            <div className='text-sm text-neutral-500 mb-1'>Type</div>
            <div className='font-medium text-neutral-900 capitalize'>
@@ -554,26 +570,27 @@ function AIInsightsContent() {
              </div>
 
              <div className='space-y-4'>
-              {aiAnalysis.performanceOptimization.issues.length > 0 && (
-               <div>
-                <h4 className='font-medium text-neutral-900 mb-2'>
-                 Issues Identified:
-                </h4>
-                <ul className='space-y-1'>
-                 {aiAnalysis.performanceOptimization.issues.map(
-                  (issue, index) => (
-                   <li
-                    key={index}
-                    className='text-sm text-red-600 flex items-start'
-                   >
-                    <span className='text-red-500 mr-2'>•</span>
-                    {issue}
-                   </li>
-                  )
-                 )}
-                </ul>
-               </div>
-              )}
+              {aiAnalysis.performanceOptimization?.issues &&
+               aiAnalysis.performanceOptimization.issues.length > 0 && (
+                <div>
+                 <h4 className='font-medium text-neutral-900 mb-2'>
+                  Issues Identified:
+                 </h4>
+                 <ul className='space-y-1'>
+                  {aiAnalysis.performanceOptimization.issues.map(
+                   (issue, index) => (
+                    <li
+                     key={index}
+                     className='text-sm text-red-600 flex items-start'
+                    >
+                     <span className='text-red-500 mr-2'>•</span>
+                     {issue}
+                    </li>
+                   )
+                  )}
+                 </ul>
+                </div>
+               )}
 
               <div>
                <h4 className='font-medium text-neutral-900 mb-2'>
