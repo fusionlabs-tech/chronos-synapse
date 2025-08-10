@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { logger } from '../utils/logger';
 import { redisService, JobData, JobExecution } from './RedisService';
 
@@ -42,13 +41,7 @@ export interface AIAnalysisResult {
 }
 
 export class AIService {
- private anthropic: Anthropic;
-
- constructor() {
-  this.anthropic = new Anthropic({
-   apiKey: process.env.ANTHROPIC_API_KEY,
-  });
- }
+ constructor() {}
 
  /**
   * Analyze job execution for anomalies
@@ -363,6 +356,10 @@ export class AIService {
 
  private analyzePerformanceMetrics(job: JobData, executions: JobExecution[]) {
   const successfulExecutions = executions.filter((e) => e.status === 'success');
+  const snippetSource = executions.find(
+   (e) => typeof e.codeSnippet === 'string' && e.codeSnippet.length > 0
+  );
+  const codeSnippet = snippetSource?.codeSnippet || '';
 
   return {
    avgDuration:
@@ -372,8 +369,10 @@ export class AIService {
      : 0,
    successRate:
     executions.length > 0 ? successfulExecutions.length / executions.length : 0,
-   resourceUsage: this.estimateResourceUsage(job),
-   commandComplexity: this.analyzeCommandComplexity(job.command),
+   resourceUsage: this.estimateResourceUsage(job, codeSnippet),
+   commandComplexity: this.analyzeCommandComplexity(
+    codeSnippet || String((job as any)?.command || '')
+   ),
   };
  }
 
@@ -403,27 +402,34 @@ export class AIService {
   return 0.5; // Placeholder
  }
 
- private estimateResourceUsage(job: JobData) {
-  // Simple estimation based on command type
-  const command = job.command.toLowerCase();
+ private estimateResourceUsage(job: JobData, codeSnippet?: string) {
+  // Simple estimation based on observed code snippet (preferred) or legacy command
+  const basis = String(
+   codeSnippet || (job as any)?.command || ''
+  ).toLowerCase();
 
-  if (command.includes('backup') || command.includes('dump')) {
+  if (basis.includes('backup') || basis.includes('dump')) {
    return 'high';
-  } else if (command.includes('curl') || command.includes('wget')) {
+  } else if (
+   basis.includes('curl') ||
+   basis.includes('wget') ||
+   basis.includes('http') ||
+   basis.includes('fetch')
+  ) {
    return 'medium';
   } else {
    return 'low';
   }
  }
 
- private analyzeCommandComplexity(command: string) {
+ private analyzeCommandComplexity(source: string) {
+  const text = String(source || '');
   const complexity = {
-   hasLoops: command.includes('for') || command.includes('while'),
-   hasConditionals:
-    command.includes('if') || command.includes('&&') || command.includes('||'),
-   hasPipes: command.includes('|'),
-   hasRedirections: command.includes('>') || command.includes('<'),
-   commandCount: command.split(';').length + command.split('&&').length - 1,
+   hasLoops: /\b(for|while|map|reduce|forEach)\b/.test(text),
+   hasConditionals: /\b(if|switch|\?|&&|\|\|)\b/.test(text),
+   hasPipes: text.includes('|'),
+   hasRedirections: text.includes('>') || text.includes('<'),
+   commandCount: (text.match(/;|&&/g) || []).length,
   };
 
   let score = 1;
@@ -448,19 +454,25 @@ export class AIService {
   anomalies: string[],
   baseline: any
  ): Promise<AnomalyDetectionResult> {
-  const prompt = `You are an AI system analyzing cron job execution anomalies.
+  const lang = (execution as any)?.codeLanguage || 'plaintext';
+  const snippet = (execution as any)?.codeSnippet
+   ? String((execution as any).codeSnippet).slice(0, 4000)
+   : '';
+  const codeBlock = snippet
+   ? `\nCode Snippet (${lang}):\n\n\`\`\`${lang}\n${snippet}\`\`\`\n`
+   : '';
+  const prompt = `You are analyzing job execution anomalies in a telemetry-only system (SDK ingests executions; server does not run jobs).
 
-Job Details:
+Job Metadata:
 - Name: ${job.name}
-- Command: ${job.command}
-- Schedule: ${job.schedule}
-- Timeout: ${job.timeout}ms
+- Schedule: ${job.schedule || 'One-time/unspecified'}
 
 Current Execution:
 - Status: ${execution.status}
 - Duration: ${execution.duration}ms
 - Exit Code: ${execution.exitCode}
 - Error: ${execution.error || 'None'}
+${codeBlock}
 
 Baseline Metrics:
 - Average Duration: ${baseline.avgDuration}ms
@@ -486,19 +498,15 @@ Respond in JSON format:
 }`;
 
   try {
-   const response = await this.anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
-    max_tokens: 1000,
-    messages: [{ role: 'user', content: prompt }],
-   });
-
-   const content = response.content[0];
-   if (content.type === 'text') {
-    const result = JSON.parse(content.text);
-    return result as AnomalyDetectionResult;
-   }
-
-   throw new Error('Invalid AI response format');
+   // Stubbed result without external API
+   return {
+    isAnomaly: anomalies.length > 0,
+    confidence: anomalies.length > 0 ? 0.7 : 0.2,
+    reason: anomalies.join(', ') || 'No specific anomalies detected',
+    severity:
+     anomalies.length > 2 ? 'high' : anomalies.length > 0 ? 'medium' : 'low',
+    suggestions: ['Monitor job execution patterns', 'Check system resources'],
+   };
   } catch (error) {
    logger.error('AI anomaly analysis failed:', error);
    return {
@@ -519,10 +527,9 @@ Respond in JSON format:
  ): Promise<PredictiveScheduleResult> {
   const prompt = `You are an AI system suggesting optimal cron schedules.
 
-Job Details:
+Job Metadata:
 - Name: ${job.name}
-- Current Schedule: ${job.schedule}
-- Command: ${job.command}
+- Current Schedule: ${job.schedule || 'One-time/unspecified'}
 
 Execution Patterns (last ${executions.length} executions):
 - Time of day distribution: ${patterns.timeOfDay
@@ -555,19 +562,13 @@ Respond in JSON format:
 }`;
 
   try {
-   const response = await this.anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
-    max_tokens: 1000,
-    messages: [{ role: 'user', content: prompt }],
-   });
-
-   const content = response.content[0];
-   if (content.type === 'text') {
-    const result = JSON.parse(content.text);
-    return result as PredictiveScheduleResult;
-   }
-
-   throw new Error('Invalid AI response format');
+   // Stub suggestion
+   return {
+    suggestedSchedule: job.schedule || '0 * * * *',
+    confidence: 0.4,
+    reasoning: 'Heuristic suggestion without external AI',
+    expectedImprovement: 'Collect more data for higher confidence',
+   };
   } catch (error) {
    logger.error('AI schedule suggestion failed:', error);
    return {
@@ -585,19 +586,26 @@ Respond in JSON format:
   attempt: number,
   failurePatterns: any
  ): Promise<SmartRetryResult> {
-  const prompt = `You are an AI system determining retry strategies for failed jobs.
+  const lang = (execution as any)?.codeLanguage || 'plaintext';
+  const snippet = (execution as any)?.codeSnippet
+   ? String((execution as any).codeSnippet).slice(0, 4000)
+   : '';
+  const codeBlock = snippet
+   ? `\nCode Snippet (${lang}):\n\n\`\`\`${lang}\n${snippet}\`\`\`\n`
+   : '';
+  const prompt = `You are determining retry strategies for a failed job in a telemetry-only system.
 
-Job Details:
+Job Metadata:
 - Name: ${job.name}
-- Command: ${job.command}
-- Current Retry Setting: ${job.retries}
-- Timeout: ${job.timeout}ms
+- Retry Setting: ${(job as any)?.retries ?? 'unspecified'}
 
 Current Failure:
 - Attempt: ${attempt}
 - Status: ${execution.status}
 - Error: ${execution.error || 'None'}
 - Duration: ${execution.duration}ms
+- Error Stack: ${(execution as any)?.errorStack || 'N/A'}
+${codeBlock}
 
 Failure Patterns:
 - Total Failures: ${failurePatterns.totalFailures}
@@ -622,19 +630,13 @@ Respond in JSON format:
 }`;
 
   try {
-   const response = await this.anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
-    max_tokens: 1000,
-    messages: [{ role: 'user', content: prompt }],
-   });
-
-   const content = response.content[0];
-   if (content.type === 'text') {
-    const result = JSON.parse(content.text);
-    return result as SmartRetryResult;
-   }
-
-   throw new Error('Invalid AI response format');
+   return {
+    shouldRetry: attempt < ((job as any)?.retries ?? 3),
+    retryDelay: Math.pow(2, attempt) * 1000,
+    maxRetries: (job as any)?.retries ?? 3,
+    reasoning: 'Heuristic fallback without external AI',
+    strategy: 'exponential_backoff',
+   };
   } catch (error) {
    logger.error('AI retry strategy failed:', error);
    return {
@@ -652,14 +654,19 @@ Respond in JSON format:
   metrics: any,
   executions: JobExecution[]
  ): Promise<PerformanceOptimizationResult> {
-  const prompt = `You are an AI system optimizing job performance.
+  const latestWithCode = executions.find((e) => (e as any)?.codeSnippet);
+  const lang = (latestWithCode as any)?.codeLanguage || 'plaintext';
+  const snippet = (latestWithCode as any)?.codeSnippet
+   ? String((latestWithCode as any).codeSnippet).slice(0, 4000)
+   : '';
+  const codeBlock = snippet
+   ? `\nCode Snippet (${lang}):\n\n\`\`\`${lang}\n${snippet}\`\`\`\n`
+   : '';
+  const prompt = `You are optimizing job performance for a telemetry-only system.
 
-Job Details:
+Job Metadata:
 - Name: ${job.name}
-- Command: ${job.command}
-- Schedule: ${job.schedule}
-- Timeout: ${job.timeout}ms
-- Retries: ${job.retries}
+- Schedule: ${job.schedule || 'One-time/unspecified'}
 
 Performance Metrics:
 - Average Duration: ${metrics.avgDuration}ms
@@ -670,6 +677,7 @@ Performance Metrics:
   })
 
 Execution History: ${executions.length} executions
+${codeBlock}
 
 Analyze this job and provide:
 1. Performance score (0-100)
@@ -678,7 +686,7 @@ Analyze this job and provide:
 4. Estimated improvement potential
 
 Consider:
-- Command efficiency
+- Code efficiency
 - Resource utilization
 - Error patterns
 - Scheduling optimization
@@ -693,19 +701,13 @@ Respond in JSON format:
 }`;
 
   try {
-   const response = await this.anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
-    max_tokens: 1000,
-    messages: [{ role: 'user', content: prompt }],
-   });
-
-   const content = response.content[0];
-   if (content.type === 'text') {
-    const result = JSON.parse(content.text);
-    return result as PerformanceOptimizationResult;
-   }
-
-   throw new Error('Invalid AI response format');
+   // Stubbed result without external API
+   return {
+    score: Math.round((metrics.successRate || 0) * 100),
+    issues: ['Heuristic analysis only'],
+    suggestions: ['Review job code and resource usage'],
+    estimatedImprovement: 'Unknown',
+   };
   } catch (error) {
    logger.error('AI performance optimization failed:', error);
    return {

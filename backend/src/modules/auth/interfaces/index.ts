@@ -9,9 +9,8 @@ export interface User {
  createdAt: Date;
  updatedAt: Date;
  lastLoginAt?: Date | null;
- avatar?: string | null;
+ oauthProvider?: 'GOOGLE' | 'GITHUB';
  emailVerified?: boolean;
- oauthProvider?: 'GOOGLE' | 'GITHUB' | null;
 }
 
 export interface CreateUserRequest {

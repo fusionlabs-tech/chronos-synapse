@@ -7,6 +7,9 @@ CREATE TYPE "TeamRole" AS ENUM ('OWNER', 'ADMIN', 'MEMBER');
 -- CreateEnum
 CREATE TYPE "ExecutionStatus" AS ENUM ('RUNNING', 'SUCCESS', 'FAILED', 'TIMEOUT', 'CANCELLED');
 
+-- CreateEnum
+CREATE TYPE "OAuthProvider" AS ENUM ('GOOGLE', 'GITHUB');
+
 -- CreateTable
 CREATE TABLE "users" (
     "id" TEXT NOT NULL,
@@ -14,9 +17,14 @@ CREATE TABLE "users" (
     "username" TEXT NOT NULL,
     "firstName" TEXT NOT NULL,
     "lastName" TEXT NOT NULL,
-    "password" TEXT NOT NULL,
+    "oauthProvider" "OAuthProvider",
+    "oauthId" TEXT,
+    "avatar" TEXT,
     "role" "Role" NOT NULL DEFAULT 'USER',
     "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "emailVerified" BOOLEAN NOT NULL DEFAULT false,
+    "emailVerifyToken" TEXT,
+    "emailVerifyExpiry" TIMESTAMP(3),
     "lastLoginAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -66,7 +74,9 @@ CREATE TABLE "user_sessions" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "token" TEXT NOT NULL,
+    "refreshToken" TEXT,
     "expiresAt" TIMESTAMP(3) NOT NULL,
+    "refreshExpiresAt" TIMESTAMP(3),
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "userAgent" TEXT,
     "ipAddress" TEXT,
@@ -114,11 +124,29 @@ CREATE TABLE "job_executions" (
     CONSTRAINT "job_executions_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "notifications" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "data" JSONB,
+    "isRead" BOOLEAN NOT NULL DEFAULT false,
+    "readAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "users_username_key" ON "users"("username");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_emailVerifyToken_key" ON "users"("emailVerifyToken");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "team_members_userId_teamId_key" ON "team_members"("userId", "teamId");
@@ -128,6 +156,9 @@ CREATE UNIQUE INDEX "api_keys_key_key" ON "api_keys"("key");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "user_sessions_token_key" ON "user_sessions"("token");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "user_sessions_refreshToken_key" ON "user_sessions"("refreshToken");
 
 -- AddForeignKey
 ALTER TABLE "team_members" ADD CONSTRAINT "team_members_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -149,3 +180,6 @@ ALTER TABLE "jobs" ADD CONSTRAINT "jobs_teamId_fkey" FOREIGN KEY ("teamId") REFE
 
 -- AddForeignKey
 ALTER TABLE "job_executions" ADD CONSTRAINT "job_executions_jobId_fkey" FOREIGN KEY ("jobId") REFERENCES "jobs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "notifications" ADD CONSTRAINT "notifications_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
