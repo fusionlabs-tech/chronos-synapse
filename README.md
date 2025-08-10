@@ -1,195 +1,123 @@
-# ⚡ Chronos Synapse
+# Chronos Synapse
 
-**AI-Driven Cron Management with Auto-Recovery and Team Workflows**
+Telemetry-first job analytics: SDK ingestion + real-time, read‑only dashboard
 
-_Built for the Redis AI Challenge 2024_
+## What it is now
 
-## 🚀 Overview
+- Backend: Fastify API that accepts job signatures and execution telemetry, stores in Redis Stack, and broadcasts realtime via Socket.IO. Auth with API keys.
+- SDK: `@chronos-synapse/sdk` to register jobs and send batched execution events. Primary API is `ChronosRunner`.
+- Frontend: Next.js 14 dashboard (read-only) for jobs, executions, analytics, and profile.
 
-Chronos Synapse revolutionizes cron job management by combining Redis's multi-model capabilities with AI-powered predictive analytics. Unlike legacy solutions, it provides real-time monitoring, semantic error clustering, and automatic failure recovery.
+## Core architecture
 
-### 🎯 Key Features
+- Redis Stack
+  - RedisJSON: jobs, executions
+  - RediSearch: `idx:jobs`, `idx:executions` (TAG on `jobId`)
+  - RedisTimeSeries: execution counters/durations (duplicate policy LAST)
+  - Pub/Sub: `execution:ingested` → Socket.IO
+- Postgres (Prisma): users and API keys
+- Socket.IO: realtime to dashboard and SDK triggers
 
-- **Real-Time Job Dashboard**: Live monitoring with Redis TimeSeries
-- **Predictive Failure Analytics**: AI-powered insights using vector search
-- **Auto-Recovery Mechanisms**: Dynamic deadline adjustment based on historical data
-- **Semantic Error Clustering**: Group similar failures and suggest fixes
-- **Cross-Team Collaboration**: Shared job workflows and notifications
-- **Dynamic Scheduling**: Intelligent resource conflict detection
+## SDK (apps instrument this)
 
-### 🏆 Redis AI Challenge Alignment
-
-**Prompt 1 - Real-Time AI Innovators**: ✅
-
-- Vector search for semantic error clustering
-- AI-powered predictive scheduling
-- Real-time feature streaming for ML workflows
-
-**Prompt 2 - Beyond the Cache**: ✅
-
-- Redis as primary database with JSON storage
-- TimeSeries for metrics collection
-- Full-text search across job logs
-- Real-time streams for live updates
-- Graph database for dependency mapping
-
-## 🏗️ Tech Stack
-
-### Frontend
-
-- **Next.js 14** + TypeScript
-- **shadcn/ui** for modern components
-- **TailwindCSS** for styling
-- **Recharts** for data visualization
-
-### Backend
-
-- **Node.js** + **Fastify**
-- **TypeScript** for type safety
-- **Prisma** for user management
-- **Anthropic Claude** for AI features
-
-### Redis Stack (Core)
-
-```
-🔥 RedisJSON     → Job configurations & metadata
-📈 TimeSeries    → Performance metrics & monitoring
-🔍 RedisSearch   → Full-text search across jobs/logs
-🕸️  RedisGraph    → Job dependency mapping
-🌊 RedisStreams  → Real-time event streaming
-🧠 Redis Vector  → Semantic error clustering
-```
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Node.js 18+
-- Docker & Docker Compose
-- Git
-
-### Installation
-
-1. **Clone & Install**
+Install (local):
 
 ```bash
-git clone <your-repo>
-cd chronos-synapse
-npm install
+npm install @chronos-synapse/sdk
 ```
 
-2. **Start Redis Stack**
+Use `ChronosRunner`:
 
-```bash
-npm run docker:up
-```
+```ts
+import ChronosRunner from '@chronos-synapse/sdk';
 
-3. **Setup Environment**
+const runner = new ChronosRunner({
+ apiKey: process.env.CHRONOS_API_KEY!,
+ // endpoint defaults to http://localhost:3001
+ captureConsole: true,
+});
 
-```bash
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
-# Edit with your Anthropic API key
-```
-
-4. **Run Development Servers**
-
-```bash
-npm run dev
-```
-
-### 🌐 Access Points
-
-- **Frontend Dashboard**: http://localhost:3000
-- **Backend API**: http://localhost:3001
-- **RedisInsight**: http://localhost:8001
-- **Redis Server**: localhost:6379
-
-## 🔧 Development
-
-### Project Structure
-
-```
-chronos-synapse/
-├── frontend/          # Next.js dashboard
-├── backend/           # Fastify API server
-├── docker-compose.yml # Redis Stack setup
-├── redis.conf         # Redis configuration
-└── README.md
-```
-
-### Key Commands
-
-```bash
-npm run dev           # Start both frontend & backend
-npm run build         # Build for production
-npm run docker:up     # Start Redis Stack
-npm run docker:down   # Stop all services
-```
-
-## 🧠 AI Features
-
-### 1. Semantic Error Clustering
-
-```typescript
-// Vector embeddings for error analysis
-const errorVector = await generateEmbedding(errorMessage);
-const similarErrors = await redis.ft.search(
- 'errors',
- `*=>[KNN 5 @vector $query]`,
+await runner['client'].registerJobs([
+ { id: 'job-1', name: 'Reports', schedule: '0 * * * *', runMode: 'recurring' },
  {
-  PARAMS: { query: errorVector },
- }
-);
+  id: 'job-once',
+  name: 'One-time',
+  schedule: '',
+  runMode: 'once',
+  runAt: '2025-09-01T12:00:00Z',
+ },
+]);
+
+runner.register('job-1', async () => {
+ /* work */
+});
+runner.register('job-once', async () => {
+ /* one-time work */
+});
+
+runner.start();
 ```
 
-### 2. Predictive Scheduling
+Auto-captured telemetry: status, duration, error stack/message, stdout/stderr, code snippet/language, appVersion/jobVersion.
 
-- Analyze historical job performance
-- Predict resource conflicts
-- Suggest optimal scheduling windows
+## Backend API (ingestion)
 
-### 3. Auto-Recovery
+- POST `/api/ingest/jobs/register`
 
-- Dynamic `startingDeadlineSeconds` adjustment
-- Intelligent retry strategies
-- Failure pattern recognition
+  - Body: `{ jobs: Array<{ id, name, schedule, runMode, version?, signatureHash?, orgId?, appId?, runAt? }> }`
+  - Auth: `x-api-key`
+  - Idempotent upsert; fills `userId`, `orgId`, `appId`; sets `runMode`.
 
-## 📊 Demo Features
+- POST `/api/ingest/executions/batch`
+  - Body: `{ executions: Array<ExecutionEvent> }`
+  - Stores execution JSON, updates TS metrics, publishes `execution:ingested`.
 
-1. **Live Job Map**: Real-time dependency visualization
-2. **Failure Heatmap**: Historical error patterns
-3. **AI Insights Panel**: Predictive recommendations
-4. **Team Collaboration**: Shared workflows and alerts
-5. **Performance Analytics**: Redis TimeSeries dashboard
+## Frontend
 
-## 🎨 UI Preview
+- Read-only dashboard (Next.js 14): Jobs, Executions, Analytics, Profile
+- Realtime Socket.IO integration (connection indicator, recent executions)
+- User auth via OAuth/JWT; profile shows name, avatar, last login
 
-The dashboard features:
+## Deployment
 
-- Modern, responsive design with dark/light themes
-- Real-time job status updates
-- Interactive dependency graphs
-- AI-powered insights and recommendations
-- Beautiful data visualizations
+- Backend (Fly.io)
 
-## 🏅 Hackathon Submission
+  - Dockerfile builds TypeScript, generates Prisma client, runs `prisma migrate deploy` on start
+  - Secrets to set:
+    - `FRONTEND_URL` (e.g., https://your-frontend.vercel.app)
+    - `DATABASE_URL` (Postgres, SSL enabled)
+    - `REDIS_URL` (Redis Cloud/Stack URL)
+    - `JWT_SECRET`
+    - Optional: `GOOGLE_CLIENT_ID/SECRET`, `GITHUB_CLIENT_ID/SECRET`
+  - Deploy:
+    - `flyctl deploy --remote-only`
 
-**Value Proposition**:
+- Frontend (Vercel)
+  - Root: `frontend`
+  - Build: `npm run build`, Output: `.next`
+  - Env: `NEXT_PUBLIC_API_URL=https://<fly-app>.fly.dev/api`
 
-> "Unlike legacy cron systems, Chronos Synapse uses semantic failure analysis to reduce debugging time by 65% – handling 50K+ jobs/minute with Redis Stack."
+## Local development
 
-**Demo Flow**:
+- Prereqs: Node 20+, Redis Stack, Postgres
+- Setup:
 
-1. Show live job monitoring dashboard
-2. Demonstrate AI error clustering
-3. Highlight auto-recovery in action
-4. Showcase team collaboration features
+```bash
+# Backend
+cp backend/.env.example backend/.env  # fill DATABASE_URL, REDIS_URL, JWT_SECRET
+npm run build:backend && (cd backend && npx prisma migrate deploy)
 
-## 📝 License
+# Frontend
+cp frontend/.env.example frontend/.env
+npm run dev  # runs apps in watch/dev (adjust scripts if needed)
+```
 
-MIT License - Built for Redis AI Challenge 2024
+## Notes & decisions
 
----
+- Server-side job execution was removed. All execution happens in client apps (via SDK). The server ingests telemetry and triggers via Socket.IO for scheduled jobs.
+- One-time jobs: use `runMode: 'once'` with either a cron (fires first match) or `runAt` (ISO/epoch).
+- Realtime indexes: `idx:executions` uses TAG `jobId` (normalized id without dashes).
 
-_Ready to revolutionize cron management? Let's build the future of job orchestration! 🚀_
+## License
+
+MIT

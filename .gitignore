@@ -80,4 +80,5 @@ Thumbs.db
 
 # Temporary folders
 tmp/
-temp/ 
+temp/
+examples/sdk-local-test/

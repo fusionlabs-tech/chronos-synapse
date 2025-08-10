@@ -9,6 +9,9 @@ export interface User {
  createdAt: Date;
  updatedAt: Date;
  lastLoginAt?: Date | null;
+ avatar?: string | null;
+ emailVerified?: boolean;
+ oauthProvider?: 'GOOGLE' | 'GITHUB' | null;
 }
 
 export interface CreateUserRequest {
@@ -16,8 +19,10 @@ export interface CreateUserRequest {
  username: string;
  firstName: string;
  lastName: string;
- password: string;
- role?: 'USER' | 'ADMIN';
+ role: 'USER' | 'ADMIN';
+ oauthProvider: 'GOOGLE' | 'GITHUB';
+ oauthId: string;
+ avatar?: string | null;
 }
 
 export interface UpdateUserRequest {
@@ -27,16 +32,16 @@ export interface UpdateUserRequest {
  lastName?: string;
  isActive?: boolean;
  role?: 'USER' | 'ADMIN';
-}
-
-export interface LoginRequest {
- email: string;
- password: string;
+ oauthProvider?: 'GOOGLE' | 'GITHUB' | null;
+ oauthId?: string | null;
+ avatar?: string | null;
+ lastLoginAt?: string;
 }
 
 export interface LoginResponse {
  user: User;
  token: string;
+ refreshToken: string;
  expiresIn: number;
 }
 
