@@ -132,10 +132,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
      showToast('Login successful!', 'success');
 
      // Check for stored redirect path
-     const redirectPath = sessionStorage.getItem('redirectAfterLogin');
+     const stored = sessionStorage.getItem('redirectAfterLogin');
+     const redirectPath = stored && stored !== '/auth/login' ? stored : null;
      const finalRedirectPath = redirectPath || '/dashboard';
 
-     if (redirectPath) {
+     if (stored) {
       sessionStorage.removeItem('redirectAfterLogin');
      }
 
@@ -163,7 +164,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
  const loginWithGoogle = () => {
   // Store current path for redirect after login
-  sessionStorage.setItem('redirectAfterLogin', window.location.pathname);
+  const current = window.location.pathname;
+  sessionStorage.setItem(
+   'redirectAfterLogin',
+   current && current !== '/auth/login' ? current : '/dashboard'
+  );
 
   // Redirect to backend OAuth endpoint
   window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/google`;
@@ -171,7 +176,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
  const loginWithGitHub = () => {
   // Store current path for redirect after login
-  sessionStorage.setItem('redirectAfterLogin', window.location.pathname);
+  const current = window.location.pathname;
+  sessionStorage.setItem(
+   'redirectAfterLogin',
+   current && current !== '/auth/login' ? current : '/dashboard'
+  );
 
   // Redirect to backend OAuth endpoint
   window.location.href = `${process.env.NEXT_PUBLIC_API_URL}/auth/github`;
