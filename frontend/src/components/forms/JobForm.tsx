@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Job, JobFormData } from '@/types';
 import { apiClient } from '@/lib/api';
 import { isValidCronExpression } from '@/lib/utils';
-import { useToast } from '@/components/ui/toast';
+import { useToast } from '@/components/ui/toasts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

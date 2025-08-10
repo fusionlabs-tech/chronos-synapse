@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from '@/components/ui/toast';
+import { useToast } from '@/components/ui/toasts';
 import { useRouter } from 'next/navigation';
 
 interface ApiRequestOptions extends RequestInit {

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api';
 import { User } from '@/types';
-import { useToast } from '@/components/ui/toast';
+import { useToast } from '@/components/ui/toasts';
 import { useRealtime } from '@/contexts/PubSubContext';
 import RateLimitManager from '@/components/admin/RateLimitManager';
 import {
