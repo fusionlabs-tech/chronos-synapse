@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Inter, Poppins } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/lib/utils';
-import { ToastProvider } from '@/components/ui/toast';
+import { ToastProvider } from '@/components/ui/toasts';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { NotificationProvider } from '@/contexts/NotificationContext';
