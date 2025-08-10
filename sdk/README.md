@@ -21,9 +21,6 @@ yarn add chronos-synapse-sdk
 import ChronosRunner from 'chronos-synapse-sdk';
 
 const runner = new ChronosRunner({
- // endpoint is optional; defaults to http://localhost:3001. You can override via env CHRONOS_API_URL/CHRONOS_ENDPOINT or config.
- endpoint: process.env.CHRONOS_API_URL,
- // API key is REQUIRED
  apiKey: process.env.CHRONOS_API_KEY!,
  // Optional tuning
  batchSize: 50,
