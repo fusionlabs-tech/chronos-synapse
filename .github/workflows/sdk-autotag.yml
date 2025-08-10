@@ -1,0 +1,67 @@
+name: Auto-tag SDK Release
+
+on:
+ pull_request:
+  types: [closed]
+  branches: [main]
+
+permissions:
+ contents: write
+
+jobs:
+ autotag:
+  name: Bump version and tag (SDK)
+  if: github.event.pull_request.merged == true
+  runs-on: ubuntu-latest
+
+  steps:
+   - name: Checkout
+     uses: actions/checkout@v4
+     with:
+      fetch-depth: 0
+
+   - name: Determine release type from labels
+     id: rel
+     uses: actions/github-script@v7
+     with:
+      script: |
+       const labels = (context.payload.pull_request.labels || []).map(l => l.name);
+       let type = '';
+       if (labels.includes('sdk-major')) type = 'major';
+       else if (labels.includes('sdk-minor')) type = 'minor';
+       else if (labels.includes('sdk-patch')) type = 'patch';
+       core.setOutput('type', type);
+
+   - name: Setup Node
+     if: steps.rel.outputs.type != ''
+     uses: actions/setup-node@v4
+     with:
+      node-version: '20'
+
+   - name: Install SDK deps
+     if: steps.rel.outputs.type != ''
+     run: npm ci
+     working-directory: sdk
+
+   - name: Bump SDK version
+     if: steps.rel.outputs.type != ''
+     run: |
+      npm version ${{ steps.rel.outputs.type }} --no-git-tag-version
+     working-directory: sdk
+
+   - name: Read new version
+     if: steps.rel.outputs.type != ''
+     id: ver
+     run: |
+      echo "version=$(node -p \"require('./sdk/package.json').version\")" >> $GITHUB_OUTPUT
+
+   - name: Commit and tag
+     if: steps.rel.outputs.type != ''
+     run: |
+      git config user.name "github-actions"
+      git config user.email "github-actions@github.com"
+      git add sdk/package.json sdk/package-lock.json || true
+      git commit -m "chore(sdk): release v${{ steps.ver.outputs.version }}"
+      git tag sdk-v${{ steps.ver.outputs.version }}
+      git push origin HEAD:main
+      git push origin sdk-v${{ steps.ver.outputs.version }}

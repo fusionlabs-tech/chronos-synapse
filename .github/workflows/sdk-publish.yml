@@ -1,0 +1,47 @@
+name: Publish SDK
+
+on:
+ push:
+  tags:
+   - 'sdk-v*'
+
+permissions:
+ contents: read
+ packages: write
+
+jobs:
+ publish:
+  name: Publish @chronos-synapse/sdk
+  runs-on: ubuntu-latest
+  defaults:
+   run:
+    working-directory: sdk
+
+  steps:
+   - name: Checkout
+     uses: actions/checkout@v4
+     with:
+      fetch-depth: 0
+
+   - name: Use Node.js
+     uses: actions/setup-node@v4
+     with:
+      node-version: '20'
+      registry-url: 'https://registry.npmjs.org'
+
+   - name: Install dependencies
+     run: npm ci
+
+   - name: Set package version from tag
+     run: |
+      VERSION="${GITHUB_REF_NAME#sdk-v}"
+      echo "Version from tag: $VERSION"
+      npm version "$VERSION" --no-git-tag-version
+
+   - name: Build
+     run: npm run build
+
+   - name: Publish to npm
+     run: npm publish --access public
+     env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
