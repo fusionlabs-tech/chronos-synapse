@@ -6,11 +6,14 @@
   "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
   "dev:backend": "cd backend && npm run dev",
   "dev:frontend": "cd frontend && npm run dev",
-  "build": "npm run build:backend && npm run build:frontend",
+  "build": "npm run build:backend && npm run build:frontend && npm run build:sdk",
   "build:backend": "cd backend && npm run build",
   "build:frontend": "cd frontend && npm run build",
+  "build:sdk": "cd sdk && npm run build",
   "start": "npm run start:backend",
-  "start:backend": "cd backend && npm start"
+  "start:backend": "cd backend && npm start",
+  "sdk:clean": "cd sdk && npm run clean",
+  "sdk:publish:dry": "cd sdk && npm pack"
  },
  "keywords": [
   "cron",
@@ -20,7 +23,7 @@
   "scheduling",
   "hackathon"
  ],
- "author": "Your Name",
+ "author": "Fusion Labs",
  "license": "MIT",
  "devDependencies": {
   "concurrently": "^8.2.2"
