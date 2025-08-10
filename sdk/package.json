@@ -1,0 +1,44 @@
+{
+ "name": "@chronos-synapse/sdk",
+ "version": "0.1.0",
+ "description": "Chronos Synapse SDK for registering jobs and reporting executions to the Chronos backend",
+ "main": "dist/index.js",
+ "types": "dist/index.d.ts",
+ "module": "dist/index.mjs",
+ "type": "module",
+ "sideEffects": false,
+ "files": [
+  "dist",
+  "README.md"
+ ],
+ "repository": {
+  "type": "git",
+  "url": "git+https://github.com/fusionlabs-tech/chronos-synapse.git"
+ },
+ "bugs": {
+  "url": "https://github.com/fusionlabs-tech/chronos-synapse/issues"
+ },
+ "homepage": "https://github.com/fusionlabs-tech/chronos-synapse#readme",
+ "scripts": {
+  "build": "tsc -p tsconfig.json",
+  "clean": "rimraf dist",
+  "prepare": "npm run build",
+  "prepublishOnly": "npm run clean && npm run build"
+ },
+ "keywords": [
+  "chronos",
+  "jobs",
+  "metrics",
+  "sdk"
+ ],
+ "author": "Chronos Synapse",
+ "license": "MIT",
+ "devDependencies": {
+  "@types/node": "^20.11.30",
+  "rimraf": "^5.0.5",
+  "typescript": "^5.4.0"
+ },
+ "dependencies": {
+  "socket.io-client": "^4.8.1"
+ }
+}
