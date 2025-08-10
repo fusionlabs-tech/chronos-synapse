@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { apiClient } from '@/lib/api';
 import { usePubSub } from '@/hooks/usePubSub';
-import { useToast } from '@/components/ui/toast';
+import { useToast } from '@/components/ui/toasts';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface NotificationContextType {

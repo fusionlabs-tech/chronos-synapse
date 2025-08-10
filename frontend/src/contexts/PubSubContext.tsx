@@ -9,7 +9,7 @@ import {
  useCallback,
 } from 'react';
 import { usePubSub as usePubSubHook } from '@/hooks/usePubSub';
-import { useToast } from '@/components/ui/toast';
+import { useToast } from '@/components/ui/toasts';
 import { apiClient } from '@/lib/api';
 import { DashboardStats, Job, JobExecution } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
