@@ -1,0 +1,17 @@
+{
+ "extends": "../backend/tsconfig.json",
+ "compilerOptions": {
+  "outDir": "dist",
+  "rootDir": "src",
+  "declaration": true,
+  "emitDeclarationOnly": false,
+  "skipLibCheck": true,
+  "resolveJsonModule": true,
+  "module": "ESNext",
+  "target": "ES2022",
+  "lib": ["ES2022", "DOM"],
+  "types": ["node"]
+ },
+ "include": ["src/**/*"],
+ "exclude": ["examples/**/*"]
+}
