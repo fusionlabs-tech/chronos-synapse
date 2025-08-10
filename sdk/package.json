@@ -1,6 +1,6 @@
 {
- "name": "@chronos-synapse/sdk",
- "version": "0.1.0",
+ "name": "chronos-synapse-sdk",
+ "version": "0.1.2",
  "description": "Chronos Synapse SDK for registering jobs and reporting executions to the Chronos backend",
  "main": "dist/index.js",
  "types": "dist/index.d.ts",

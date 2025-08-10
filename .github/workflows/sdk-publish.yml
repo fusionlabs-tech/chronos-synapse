@@ -11,7 +11,7 @@ permissions:
 
 jobs:
  publish:
-  name: Publish @chronos-synapse/sdk
+  name: Publish SDK (chronos-synapse-sdk)
   runs-on: ubuntu-latest
   defaults:
    run:
