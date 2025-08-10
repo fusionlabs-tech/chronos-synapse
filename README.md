@@ -5,7 +5,7 @@ Telemetry-first job analytics: SDK ingestion + real-time, read‑only dashboard
 ## What it is now
 
 - Backend: Fastify API that accepts job signatures and execution telemetry, stores in Redis Stack, and broadcasts realtime via Socket.IO. Auth with API keys.
-- SDK: `@chronos-synapse/sdk` to register jobs and send batched execution events. Primary API is `ChronosRunner`.
+- SDK: `chronos-synapse-sdk` to register jobs and send batched execution events. Primary API is `ChronosRunner`.
 - Frontend: Next.js 14 dashboard (read-only) for jobs, executions, analytics, and profile.
 
 ## Core architecture
@@ -23,13 +23,13 @@ Telemetry-first job analytics: SDK ingestion + real-time, read‑only dashboard
 Install (local):
 
 ```bash
-npm install @chronos-synapse/sdk
+npm install chronos-synapse-sdk
 ```
 
 Use `ChronosRunner`:
 
 ```ts
-import ChronosRunner from '@chronos-synapse/sdk';
+import ChronosRunner from 'chronos-synapse-sdk';
 
 const runner = new ChronosRunner({
  apiKey: process.env.CHRONOS_API_KEY!,

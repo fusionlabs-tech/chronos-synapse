@@ -281,7 +281,7 @@ export default function DashboardPage() {
        </div>
        <h3 className='font-medium text-neutral-900 mb-2'>Install the SDK</h3>
        <p className='text-sm text-neutral-600'>
-        Add @chronos-synapse/sdk to your application and register your jobs.
+        Add <code>chronos-synapse-sdk</code> and register jobs to see them here.
        </p>
       </div>
       <div className='text-center p-4'>

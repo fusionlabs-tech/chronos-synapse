@@ -1,4 +1,4 @@
-# @chronos-synapse/sdk
+# chronos-synapse-sdk
 
 Chronos SDK Runner for registering jobs and running them on server triggers with rich telemetry (ingestion, metrics, realtime).
 
@@ -10,19 +10,26 @@ Chronos SDK Runner for registering jobs and running them on server triggers with
 ## Installation
 
 ```bash
-npm install @chronos-synapse/sdk
+npm install chronos-synapse-sdk
 # or
-yarn add @chronos-synapse/sdk
+yarn add chronos-synapse-sdk
 ```
 
 ## Quick Start (Runner)
 
 ```ts
-import ChronosRunner from '@chronos-synapse/sdk';
+import ChronosRunner from 'chronos-synapse-sdk';
 
 const runner = new ChronosRunner({
+ // endpoint is optional; defaults to http://localhost:3001. You can override via env CHRONOS_API_URL/CHRONOS_ENDPOINT or config.
+ endpoint: process.env.CHRONOS_API_URL,
+ // API key is REQUIRED
  apiKey: process.env.CHRONOS_API_KEY!,
- captureConsole: true,
+ // Optional tuning
+ batchSize: 50,
+ flushIntervalMs: 2000,
+ captureConsole: true, // capture stdout/stderr during job runs
+ maxLogBytes: 10000, // truncation limit for logs/snippets
 });
 
 // Register your job(s)
@@ -34,14 +41,7 @@ await runner['client'].registerJobs([
   schedule: '0 * * * *',
   runMode: 'recurring',
  },
- // One-time: can provide a cron (fires on first matching minute only), or leave schedule '' and provide runAt
- {
-  id: 'job:migrate-once',
-  name: 'One-time Migration',
-  schedule: '*/2 * * * *',
-  runMode: 'once',
- },
- // Alternatively one-time at a fixed time via runAt (ISO or epoch ms) with empty schedule
+ // One-time via runAt (ISO or epoch ms) with empty schedule
  {
   id: 'job:launch-once',
   name: 'Launch',
@@ -52,24 +52,13 @@ await runner['client'].registerJobs([
 ]);
 
 runner.register('job:daily-report', async () => {
- // Your work here
- await new Promise((r) => setTimeout(r, 150));
- if (Math.random() < 0.3) throw new Error('simulated failure');
+ /* ... */
 });
-
-runner.register('job:migrate-once', async () => {
- // Your work here
- await new Promise((r) => setTimeout(r, 150));
- if (Math.random() < 0.3) throw new Error('simulated failure');
-});
-
 runner.register('job:launch-once', async () => {
- // Your work here
- await new Promise((r) => setTimeout(r, 150));
- if (Math.random() < 0.3) throw new Error('simulated failure');
+ /* ... */
 });
 
-// Start listening for triggers
+// Start listening for triggers (emitted by the Chronos server)
 runner.start();
 ```
 
@@ -113,24 +102,6 @@ The SDK truncates large fields by default (configurable via `maxLogBytes`).
   - `npm install`
   - Set env: `export CHRONOS_API_URL=http://localhost:3001; export CHRONOS_API_KEY=...`
   - Run runner test: `npm run start:runner`
-
-## Advanced (optional) – Low-level API
-
-If you need direct control of telemetry, you can still enqueue events manually. You are responsible for `execId` generation and timing fields.
-
-```ts
-// Access the internal client via runner['client'] (advanced only)
-runner['client'].enqueueExecution({
- execId: `job:daily-report:${Date.now()}`,
- jobId: 'job:daily-report',
- status: 'success',
- startedAt: new Date().toISOString(),
- finishedAt: new Date().toISOString(),
- durationMs: 742,
- exitCode: 0,
-});
-await runner['client'].flush();
-```
 
 ## Telemetry Fields
 
