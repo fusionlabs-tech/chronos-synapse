@@ -10,6 +10,7 @@ import { apiClient } from '@/lib/api';
 import { User } from '@/types';
 import { useToast } from '@/components/ui/toasts';
 import { Calendar, Crown } from 'lucide-react';
+import { Select } from '@/components/ui/select';
 
 // Simple brand icons (inline SVG) for OAuth providers
 function OAuthIcon({ provider }: { provider?: 'GOOGLE' | 'GITHUB' }) {
@@ -62,6 +63,16 @@ export default function ProfilePage() {
  const { showToast } = useToast();
  const [loading, setLoading] = useState(false);
  const [editing, setEditing] = useState(false);
+ const [aiKeys, setAiKeys] = useState<any[]>([]);
+ const [aiModalOpen, setAiModalOpen] = useState(false);
+ const [aiForm, setAiForm] = useState({
+  provider: 'OPENAI',
+  alias: '',
+  apiKey: '',
+  defaultModel: '',
+  endpointBase: '',
+  orgId: '',
+ });
 
  // Helpers
  const formatDateTime = (iso?: string) => {
@@ -75,6 +86,71 @@ export default function ProfilePage() {
    hour: '2-digit',
    minute: '2-digit',
   });
+ };
+
+ // Load AI keys
+ useEffect(() => {
+  const loadAi = async () => {
+   try {
+    const res: any = await apiClient.getAiKeys();
+    const keys = (res?.keys || []) as any[];
+    setAiKeys(keys);
+   } catch (e) {
+    setAiKeys([]);
+   }
+  };
+  if (user) void loadAi();
+ }, [user]);
+
+ const handleCreateAiKey = async () => {
+  try {
+   if (!aiForm.apiKey || !aiForm.provider) {
+    showToast('Provider and API key are required', 'warning');
+    return;
+   }
+   await apiClient.createAiKey({
+    provider: aiForm.provider,
+    alias: aiForm.alias || undefined,
+    apiKey: aiForm.apiKey,
+    defaultModel: aiForm.defaultModel || undefined,
+    endpointBase: aiForm.endpointBase || undefined,
+    orgId: aiForm.orgId || undefined,
+   });
+   setAiModalOpen(false);
+   setAiForm({
+    provider: 'OPENAI',
+    alias: '',
+    apiKey: '',
+    defaultModel: '',
+    endpointBase: '',
+    orgId: '',
+   });
+   const res: any = await apiClient.getAiKeys();
+   setAiKeys(res?.keys || []);
+   showToast('AI provider added', 'success');
+  } catch (e: any) {
+   showToast('Failed to add AI provider', 'error');
+  }
+ };
+
+ const handleDeleteAiKey = async (id: string) => {
+  try {
+   await apiClient.deleteAiKey(id);
+   setAiKeys((prev) => prev.filter((k) => k.id !== id));
+   showToast('AI provider removed', 'success');
+  } catch {
+   showToast('Failed to remove AI provider', 'error');
+  }
+ };
+
+ const handleTestAiKey = async (id: string) => {
+  try {
+   const res = await apiClient.testAiKey(id);
+   if ((res as any)?.ok) showToast('AI provider key looks good', 'success');
+   else showToast('AI provider test failed', 'error');
+  } catch {
+   showToast('AI provider test failed', 'error');
+  }
  };
 
  // Profile form state
@@ -266,6 +342,150 @@ export default function ProfilePage() {
          <Button onClick={() => setEditing(true)} className='btn-primary'>
           Edit Profile
          </Button>
+        </div>
+       )}
+      </CardContent>
+     </Card>
+
+     {/* AI Providers */}
+     <Card className='card-primary'>
+      <CardHeader className='pb-6'>
+       <div className='flex items-center justify-between'>
+        <CardTitle className='text-xl'>AI Providers (BYOK)</CardTitle>
+        <Button
+         variant='outline'
+         size='sm'
+         onClick={() => setAiModalOpen(true)}
+        >
+         Add Provider
+        </Button>
+       </div>
+      </CardHeader>
+      <CardContent>
+       {aiKeys.length === 0 ? (
+        <div className='text-sm text-neutral-600'>
+         No AI providers added yet.
+        </div>
+       ) : (
+        <div className='space-y-3'>
+         {aiKeys.map((k) => (
+          <div
+           key={k.id}
+           className='flex items-center justify-between p-3 bg-neutral-50 rounded'
+          >
+           <div className='flex flex-col'>
+            <div className='text-sm font-medium text-neutral-900'>
+             {k.provider}
+             {k.alias ? ` · ${k.alias}` : ''}
+            </div>
+            <div className='text-xs text-neutral-500'>
+             {k.maskedKey} {k.defaultModel ? `· ${k.defaultModel}` : ''} ·{' '}
+             {k.isActive ? 'Active' : 'Inactive'}
+            </div>
+           </div>
+           <div className='flex gap-2'>
+            <Button
+             variant='outline'
+             size='sm'
+             onClick={() => handleTestAiKey(k.id)}
+            >
+             Test
+            </Button>
+            <Button
+             variant='outline'
+             size='sm'
+             onClick={() => handleDeleteAiKey(k.id)}
+            >
+             Delete
+            </Button>
+           </div>
+          </div>
+         ))}
+        </div>
+       )}
+
+       {aiModalOpen && (
+        <div className='mt-6 border rounded-lg p-4 bg-white'>
+         <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+          <div>
+           <Label className='text-sm text-neutral-700'>Provider</Label>
+           <Select
+            value={aiForm.provider}
+            onChange={(e) =>
+             setAiForm((p) => ({
+              ...p,
+              provider: (e.target as HTMLSelectElement).value,
+             }))
+            }
+           >
+            <option value='OPENAI'>OpenAI</option>
+            <option value='ANTHROPIC'>Anthropic</option>
+            <option value='GOOGLE'>Google</option>
+            <option value='AZURE_OPENAI'>Azure OpenAI</option>
+            <option value='CUSTOM'>Custom</option>
+           </Select>
+          </div>
+          <div>
+           <Label className='text-sm text-neutral-700'>Alias (optional)</Label>
+           <Input
+            value={aiForm.alias}
+            onChange={(e) =>
+             setAiForm((p) => ({ ...p, alias: e.target.value }))
+            }
+           />
+          </div>
+          <div className='md:col-span-2'>
+           <Label className='text-sm text-neutral-700'>API Key</Label>
+           <Input
+            type='password'
+            value={aiForm.apiKey}
+            onChange={(e) =>
+             setAiForm((p) => ({ ...p, apiKey: e.target.value }))
+            }
+           />
+          </div>
+          <div>
+           <Label className='text-sm text-neutral-700'>Default Model</Label>
+           <Input
+            value={aiForm.defaultModel}
+            onChange={(e) =>
+             setAiForm((p) => ({ ...p, defaultModel: e.target.value }))
+            }
+           />
+          </div>
+          <div>
+           <Label className='text-sm text-neutral-700'>
+            Endpoint Base (optional)
+           </Label>
+           <Input
+            value={aiForm.endpointBase}
+            onChange={(e) =>
+             setAiForm((p) => ({ ...p, endpointBase: e.target.value }))
+            }
+            placeholder='https://api.openai.com/v1'
+           />
+          </div>
+          <div>
+           <Label className='text-sm text-neutral-700'>
+            Org/Project ID (optional)
+           </Label>
+           <Input
+            value={aiForm.orgId}
+            onChange={(e) =>
+             setAiForm((p) => ({ ...p, orgId: e.target.value }))
+            }
+           />
+          </div>
+         </div>
+         <div className='mt-4 flex gap-2'>
+          <Button variant='outline' onClick={() => setAiModalOpen(false)}>
+           Cancel
+          </Button>
+          <Button onClick={handleCreateAiKey}>Save</Button>
+         </div>
+         <p className='text-xs text-neutral-500 mt-3'>
+          Your key is encrypted at rest and never shown after saving.
+         </p>
         </div>
        )}
       </CardContent>

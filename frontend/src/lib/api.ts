@@ -447,6 +447,53 @@ class ApiClient {
   });
  }
 
+ // AI Key Management
+ async getAiKeys(): Promise<
+  | {
+     keys: Array<{
+      id: string;
+      provider: string;
+      alias?: string;
+      maskedKey: string;
+      defaultModel?: string;
+      endpointBase?: string;
+      orgId?: string;
+      isActive: boolean;
+      createdAt: string;
+      lastUsedAt?: string;
+     }>;
+    }
+  | { success: boolean; keys: any[] }
+ > {
+  return this.request('/users/ai-keys');
+ }
+
+ async createAiKey(payload: {
+  provider: string;
+  alias?: string;
+  apiKey: string;
+  defaultModel?: string;
+  endpointBase?: string;
+  orgId?: string;
+ }): Promise<{ success: boolean; id: string }> {
+  return this.request('/users/ai-keys', {
+   method: 'POST',
+   body: JSON.stringify(payload),
+  });
+ }
+
+ async deleteAiKey(id: string): Promise<{ success: boolean }> {
+  return this.request(`/users/ai-keys/${encodeURIComponent(id)}`, {
+   method: 'DELETE',
+  });
+ }
+
+ async testAiKey(id: string): Promise<{ success: boolean; ok: boolean }> {
+  return this.request(`/users/ai-keys/${encodeURIComponent(id)}/test`, {
+   method: 'POST',
+  });
+ }
+
  // Admin Management
  async getAdminUsers(): Promise<{ users: User[] }> {
   return this.request('/admin/users');
