@@ -1,5 +1,5 @@
 import { FastifyReply } from 'fastify';
-import { jobScheduler } from '../services/JobScheduler';
+import { redisService } from '../services/RedisService';
 import { AuthenticatedRequest } from './auth';
 import { JobData } from '../services/RedisService';
 
@@ -14,7 +14,7 @@ export async function requireJobOwnership(
  const { id } = request.params as { id: string };
 
  try {
-  const job = await jobScheduler.getJob(id);
+  const job = await redisService.getJob(id);
 
   if (!job) {
    return reply.status(404).send({
@@ -23,7 +23,11 @@ export async function requireJobOwnership(
    });
   }
 
-  if (job.userId !== request.user!.id.replace(/-/g, '')) {
+  // Normalize user IDs for comparison (remove hyphens for consistency)
+  const jobUserId = job.userId.replace(/-/g, '');
+  const requestUserId = request.user!.id.replace(/-/g, '');
+
+  if (jobUserId !== requestUserId) {
    return reply.status(403).send({
     error: 'Forbidden',
     message: 'Access denied',

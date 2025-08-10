@@ -11,22 +11,22 @@ datasource db {
 }
 
 model User {
-  id                String    @id @default(uuid())
-  email             String    @unique
-  username          String    @unique
+  id                String         @id @default(uuid())
+  email             String         @unique
+  username          String         @unique
   firstName         String
   lastName          String
-  password          String
-  role              Role      @default(USER)
-  isActive          Boolean   @default(true)
-  emailVerified     Boolean   @default(false)
-  emailVerifyToken  String?   @unique // For email verification
+  oauthProvider     OAuthProvider? // Enum for OAuth providers
+  oauthId           String? // OAuth provider user ID
+  avatar            String? // Profile picture URL
+  role              Role           @default(USER)
+  isActive          Boolean        @default(true)
+  emailVerified     Boolean        @default(false)
+  emailVerifyToken  String?        @unique // For email verification
   emailVerifyExpiry DateTime? // When email verification token expires
   lastLoginAt       DateTime?
-  resetToken        String?   @unique // For password reset
-  resetTokenExpiry  DateTime? // When reset token expires
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   // Relations
   jobs          Job[]
@@ -85,14 +85,16 @@ model ApiKey {
 }
 
 model UserSession {
-  id        String   @id @default(uuid())
-  userId    String
-  token     String   @unique // JWT token hash or session token
-  expiresAt DateTime
-  isActive  Boolean  @default(true)
-  userAgent String?
-  ipAddress String?
-  createdAt DateTime @default(now())
+  id               String    @id @default(uuid())
+  userId           String
+  token            String    @unique // JWT access token hash or session token
+  refreshToken     String?   @unique // JWT refresh token hash
+  expiresAt        DateTime
+  refreshExpiresAt DateTime? // When refresh token expires
+  isActive         Boolean   @default(true)
+  userAgent        String?
+  ipAddress        String?
+  createdAt        DateTime  @default(now())
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -185,4 +187,9 @@ enum ExecutionStatus {
   FAILED
   TIMEOUT
   CANCELLED
+}
+
+enum OAuthProvider {
+  GOOGLE
+  GITHUB
 }

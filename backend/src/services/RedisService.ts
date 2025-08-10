@@ -14,10 +14,16 @@ export interface JobData {
  teamId?: string;
  tags: string[];
  environment?: Record<string, string>;
+ code?: string; // Job code for IDE
+ language?: string; // Programming language
+ filename?: string; // File name for the job code
+ allowNetwork?: boolean; // Allow outbound network during execution
+ dockerImage?: string; // Docker image for job execution
  createdAt: string;
  updatedAt: string;
  lastRun?: string;
  nextRun?: string;
+ runMode?: 'once' | 'recurring';
 }
 
 export interface JobExecution {
@@ -34,15 +40,53 @@ export interface JobExecution {
  maxRetries?: number;
  lastError?: string;
  errorCount?: number;
+ isCompleted?: boolean; // New field to track completion status
+ // Optional richer telemetry captured from SDK
+ stdout?: string;
+ stderr?: string;
+ codeSnippet?: string;
+ codeLanguage?: string;
 }
 
 export class RedisService {
  private client: RedisClientType;
  private isConnected = false;
+ private connectionPromise: Promise<void> | null = null;
+ private reconnectAttempts = 0;
+ private maxReconnectAttempts = 10;
+ private isShuttingDown = false;
 
  // Public getter for Redis client (for rate limiting and other services)
  get redis(): RedisClientType {
+  if (!this.isConnected && !this.isShuttingDown) {
+   logger.warn('Redis not connected, attempting to connect...');
+   this.connect().catch((err) => {
+    logger.error('Failed to connect to Redis:', err);
+   });
+  }
   return this.client;
+ }
+
+ // Method to check if Redis is connected and ready
+ async ensureConnection(): Promise<void> {
+  if (this.isShuttingDown) {
+   throw new Error('Redis service is shutting down');
+  }
+
+  if (!this.isConnected) {
+   await this.connect();
+  }
+
+  // Double-check with a ping
+  try {
+   await this.client.ping();
+  } catch (error) {
+   logger.error('Redis ping failed, reconnecting...');
+   this.isConnected = false;
+   if (!this.isShuttingDown) {
+    await this.connect();
+   }
+  }
  }
 
  constructor() {
@@ -55,7 +99,30 @@ export class RedisService {
   );
 
   // For Redis Cloud URLs that include password, don't set separate password field
-  const clientConfig: any = { url: redisUrl };
+  const clientConfig: any = {
+   url: redisUrl,
+   socket: {
+    connectTimeout: 30000, // 30 seconds
+    lazyConnect: true, // Use lazy connect for better control
+    keepAlive: 30000, // keep TCP connection alive
+    noDelay: true,
+    reconnectStrategy: (retries: number) => {
+     if (retries > this.maxReconnectAttempts) {
+      logger.error(
+       `Redis reconnection failed after ${this.maxReconnectAttempts} attempts`
+      );
+      return new Error('Redis reconnection failed');
+     }
+     const attempt = retries + 1; // avoid 0ms delay on first retry
+     const delay = Math.min(attempt * 1000, 10000);
+     logger.info(`Redis reconnecting in ${delay}ms (attempt ${retries})`);
+     return delay;
+    },
+   },
+   // node-redis specific options; unknown props are ignored
+   retry_unfulfilled_commands: true,
+   disable_offline_queue: false,
+  };
 
   // Only add separate password if URL doesn't contain credentials and REDIS_PASSWORD is set
   if (!redisUrl.includes('@') && process.env.REDIS_PASSWORD) {
@@ -64,32 +131,202 @@ export class RedisService {
 
   this.client = createClient(clientConfig);
 
+  // Set up event listeners before connecting
   this.client.on('error', (err) => {
    logger.error('Redis Client Error:', err);
+   this.isConnected = false;
+   if (!this.isShuttingDown) {
+    this.handleReconnect();
+   }
   });
 
   this.client.on('connect', () => {
    logger.info('Connected to Redis successfully');
    this.isConnected = true;
+   this.reconnectAttempts = 0;
   });
 
   this.client.on('disconnect', () => {
    logger.warn('Disconnected from Redis');
    this.isConnected = false;
+   if (!this.isShuttingDown) {
+    this.handleReconnect();
+   }
+  });
+
+  this.client.on('reconnecting', () => {
+   logger.info('Redis reconnecting...');
+  });
+
+  this.client.on('ready', () => {
+   logger.info('Redis client ready');
+   this.isConnected = true;
+   this.reconnectAttempts = 0;
+   // Start periodic health checks
+   this.startHealthCheck();
+  });
+
+  this.client.on('end', () => {
+   logger.warn('Redis connection ended');
+   this.isConnected = false;
+   if (!this.isShuttingDown) {
+    this.handleReconnect();
+   }
+  });
+
+  // Additional debug hooks
+  this.client.on('close', () => {
+   logger.warn('Redis connection closed');
+   this.isConnected = false;
+  });
+
+  this.client.on('timeout', () => {
+   logger.warn('Redis connection timeout');
+   this.isConnected = false;
+  });
+
+  // Handle process termination gracefully
+  process.on('SIGINT', () => {
+   this.isShuttingDown = true;
+   this.disconnect().catch((err) => {
+    logger.error('Error during Redis disconnect:', err);
+   });
+  });
+
+  process.on('SIGTERM', () => {
+   this.isShuttingDown = true;
+   this.disconnect().catch((err) => {
+    logger.error('Error during Redis disconnect:', err);
+   });
   });
  }
 
+ private async handleReconnect(): Promise<void> {
+  if (
+   this.isShuttingDown ||
+   this.reconnectAttempts >= this.maxReconnectAttempts
+  ) {
+   if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+    logger.error('Max reconnection attempts reached, giving up');
+   }
+   return;
+  }
+
+  this.reconnectAttempts++;
+  const delay = Math.min(this.reconnectAttempts * 1000, 10000);
+
+  logger.info(
+   `Scheduling reconnection attempt ${this.reconnectAttempts} in ${delay}ms`
+  );
+
+  setTimeout(async () => {
+   try {
+    if (!this.isConnected && !this.isShuttingDown) {
+     logger.info(
+      `Attempting reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts}`
+     );
+     await this.connect();
+    }
+   } catch (error) {
+    logger.error(
+     `Reconnection attempt ${this.reconnectAttempts} failed:`,
+     error
+    );
+    // If this attempt failed, schedule another one
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+     this.handleReconnect();
+    }
+   }
+  }, delay);
+ }
+
  async connect(): Promise<void> {
-  if (!this.isConnected) {
+  if (this.isShuttingDown) {
+   throw new Error('Redis service is shutting down');
+  }
+
+  if (this.connectionPromise) {
+   return this.connectionPromise;
+  }
+
+  if (this.isConnected) {
+   return;
+  }
+
+  this.connectionPromise = this._connect();
+  return this.connectionPromise;
+ }
+
+ private async _connect(): Promise<void> {
+  try {
    await this.client.connect();
    await this.initializeSchemas();
+   this.isConnected = true;
+   this.reconnectAttempts = 0;
+   logger.info('Redis connection established successfully');
+  } catch (error) {
+   logger.error('Failed to connect to Redis:', error);
+   this.isConnected = false;
+   throw error;
+  } finally {
+   this.connectionPromise = null;
   }
  }
 
  async disconnect(): Promise<void> {
+  this.isShuttingDown = true;
   if (this.isConnected) {
-   await this.client.disconnect();
+   try {
+    await this.client.disconnect();
+    this.isConnected = false;
+    logger.info('Redis disconnected successfully');
+   } catch (error) {
+    logger.error('Failed to disconnect from Redis:', error);
+   }
   }
+ }
+
+ async healthCheck(): Promise<boolean> {
+  try {
+   if (!this.isConnected || this.isShuttingDown) {
+    return false;
+   }
+   await this.client.ping();
+   return true;
+  } catch (error) {
+   logger.error('Redis health check failed:', error);
+   this.isConnected = false;
+   return false;
+  }
+ }
+
+ private startHealthCheck(): void {
+  // Run health check every 20 seconds to keep connection active
+  const healthCheckInterval = setInterval(async () => {
+   if (this.isShuttingDown) {
+    clearInterval(healthCheckInterval);
+    return;
+   }
+
+   try {
+    const isHealthy = await this.healthCheck();
+    if (!isHealthy && this.isConnected) {
+     logger.warn('Redis health check failed, connection may be unstable');
+     this.isConnected = false;
+    }
+   } catch (error) {
+    logger.error('Health check error:', error);
+   }
+  }, 20000);
+
+  // Clean up interval on shutdown
+  process.on('SIGINT', () => {
+   clearInterval(healthCheckInterval);
+  });
+
+  process.on('SIGTERM', () => {
+   clearInterval(healthCheckInterval);
+  });
  }
 
  private async initializeSchemas(): Promise<void> {
@@ -161,6 +398,14 @@ export class RedisService {
 
  private async createExecutionSearchIndex(): Promise<void> {
   try {
+   // Drop existing index to ensure correct schema (idempotent)
+   try {
+    await this.client.sendCommand(['FT.DROPINDEX', 'idx:executions']);
+    logger.info('Dropped existing execution index');
+   } catch (_err) {
+    // ignore if not exists
+   }
+
    logger.info('Creating execution search index...');
    await this.client.ft.create(
     'idx:executions',
@@ -168,24 +413,34 @@ export class RedisService {
      '$.jobId': {
       type: SchemaFieldTypes.TAG,
       AS: 'jobId',
-      SEPARATOR: '|',
      },
      '$.status': {
       type: SchemaFieldTypes.TAG,
       AS: 'status',
-      SEPARATOR: '|',
      },
      '$.startedAt': {
       type: SchemaFieldTypes.TEXT,
       AS: 'startedAt',
      },
+     '$.finishedAt': {
+      type: SchemaFieldTypes.TEXT,
+      AS: 'finishedAt',
+     },
      '$.duration': {
       type: SchemaFieldTypes.NUMERIC,
       AS: 'duration',
      },
-     '$.exitCode': {
-      type: SchemaFieldTypes.NUMERIC,
-      AS: 'exitCode',
+     '$.codeLanguage': {
+      type: SchemaFieldTypes.TAG,
+      AS: 'codeLanguage',
+     },
+     '$.stdout': {
+      type: SchemaFieldTypes.TEXT,
+      AS: 'stdout',
+     },
+     '$.stderr': {
+      type: SchemaFieldTypes.TEXT,
+      AS: 'stderr',
      },
     },
     {
@@ -193,14 +448,10 @@ export class RedisService {
      PREFIX: 'execution:',
     }
    );
-   logger.info('Execution search index created successfully');
   } catch (error: unknown) {
    const errorMsg = error instanceof Error ? error.message : String(error);
    if (!errorMsg.includes('Index already exists')) {
-    logger.error('Failed to create execution search index:', error);
     throw error;
-   } else {
-    logger.info('Execution search index already exists');
    }
   }
  }
@@ -253,57 +504,67 @@ export class RedisService {
 
  // Job Management Methods
  async createJob(job: JobData): Promise<void> {
-  const key = `job:${job.id}`;
-
-  // Convert boolean enabled to string for RedisSearch compatibility
-  const jobForRedis = {
-   ...job,
-   enabled: job.enabled.toString(), // Convert boolean to string
-  };
-
-  await this.client.json.set(
-   key,
-   '$',
-   jobForRedis as unknown as Parameters<typeof this.client.json.set>[2]
-  );
-
-  // Track job creation in TimeSeries
-  await this.recordMetric('ts:jobs:total', 1);
-
-  logger.info(`Job created: ${job.id}`);
+  try {
+   await this.ensureConnection();
+   const key = `job:${job.id}`;
+   await this.client.json.set(key, '$', job as unknown as any);
+   logger.info(`Job created: ${job.id}`);
+  } catch (error) {
+   logger.error(`Failed to create job ${job.id}:`, error);
+   throw error;
+  }
  }
 
  async getJob(jobId: string): Promise<JobData | null> {
-  const key = `job:${jobId}`;
-  const job = await this.client.json.get(key);
-  return job as JobData | null;
+  try {
+   await this.ensureConnection();
+   const key = `job:${jobId}`;
+   const job = await this.client.json.get(key);
+   return job as JobData | null;
+  } catch (error) {
+   logger.error(`Failed to get job ${jobId}:`, error);
+   return null;
+  }
  }
 
  async updateJob(jobId: string, updates: Partial<JobData>): Promise<void> {
-  const key = `job:${jobId}`;
+  try {
+   await this.ensureConnection();
+   const key = `job:${jobId}`;
 
-  // Update individual fields
-  for (const [field, value] of Object.entries(updates)) {
-   await this.client.json.set(key, `$.${field}`, value);
+   // Update individual fields
+   for (const [field, value] of Object.entries(updates)) {
+    if (value === undefined || value === null) continue;
+    await this.client.json.set(key, `$.${field}`, value as any);
+   }
+
+   // Update timestamp
+   await this.client.json.set(key, '$.updatedAt', new Date().toISOString());
+
+   logger.info(`Job updated: ${jobId}`);
+  } catch (error) {
+   logger.error(`Failed to update job ${jobId}:`, error);
+   throw error;
   }
-
-  // Update timestamp
-  await this.client.json.set(key, '$.updatedAt', new Date().toISOString());
-
-  logger.info(`Job updated: ${jobId}`);
  }
 
  async deleteJob(jobId: string): Promise<void> {
-  const key = `job:${jobId}`;
-  await this.client.json.del(key);
+  try {
+   await this.ensureConnection();
+   const key = `job:${jobId}`;
+   await this.client.json.del(key);
 
-  // Also delete related executions
-  const executions = await this.getJobExecutions(jobId);
-  for (const execution of executions) {
-   await this.client.json.del(`execution:${execution.id}`);
+   // Also delete related executions
+   const executions = await this.getJobExecutions(jobId);
+   for (const execution of executions) {
+    await this.client.json.del(`execution:${execution.id}`);
+   }
+
+   logger.info(`Job deleted: ${jobId}`);
+  } catch (error) {
+   logger.error(`Failed to delete job ${jobId}:`, error);
+   throw error;
   }
-
-  logger.info(`Job deleted: ${jobId}`);
  }
 
  async searchJobs(
@@ -313,6 +574,7 @@ export class RedisService {
   offset?: number
  ): Promise<JobData[]> {
   try {
+   await this.ensureConnection();
    // Build RedisSearch query
    let searchQuery = '*'; // Default to match all
 
@@ -356,21 +618,29 @@ export class RedisService {
      finalQuery = `${searchQuery} ${userIdFilter}`;
     }
    }
+
    if (filterParts.length > 0) {
-    finalQuery = `${finalQuery} ${filterParts.join(' ')}`;
+    if (finalQuery === '*') {
+     finalQuery = filterParts.join(' ');
+    } else {
+     finalQuery = `${finalQuery} ${filterParts.join(' ')}`;
+    }
    }
 
-   // Execute RedisSearch with pagination
    logger.info(`Executing RedisSearch query: ${finalQuery}`);
-   logger.info(`Filters: ${JSON.stringify(filters)}`);
+   logger.info(`Filters:`, filters);
+
    const results = await this.client.ft.search('idx:jobs', finalQuery, {
     LIMIT: {
      from: offset || 0,
-     size: limit || 100,
+     size: limit || 10,
+    },
+    SORTBY: {
+     BY: 'createdAt',
+     DIRECTION: 'DESC',
     },
    });
 
-   // Parse RedisSearch results
    const jobs: JobData[] = [];
 
    if (
@@ -473,21 +743,22 @@ export class RedisService {
 
  // Job Execution Methods
  async createExecution(execution: JobExecution): Promise<void> {
-  const key = `execution:${execution.id}`;
-
   try {
-   // Ensure execution index exists
-   await this.ensureExecutionIndexExists();
+   await this.ensureConnection();
+   const key = `execution:${execution.id}`;
 
-   // Create a clean execution object with only defined properties
+   // Clean the execution object for Redis storage
    const cleanExecution: any = {
     id: execution.id,
-    jobId: execution.jobId,
+    jobId: execution.jobId.replace(/-/g, ''), // Normalize jobId by removing hyphens
     status: execution.status,
     startedAt: execution.startedAt,
+    retryCount: execution.retryCount || 0,
+    maxRetries: execution.maxRetries || 0,
+    errorCount: execution.errorCount || 0,
+    isCompleted: execution.isCompleted || false,
    };
 
-   // Only add optional properties if they exist
    if (execution.finishedAt) cleanExecution.finishedAt = execution.finishedAt;
    if (execution.duration !== undefined)
     cleanExecution.duration = execution.duration;
@@ -495,6 +766,15 @@ export class RedisService {
     cleanExecution.exitCode = execution.exitCode;
    if (execution.output) cleanExecution.output = execution.output;
    if (execution.error) cleanExecution.error = execution.error;
+   // Optional richer telemetry
+   if ((execution as any).stdout)
+    (cleanExecution as any).stdout = (execution as any).stdout;
+   if ((execution as any).stderr)
+    (cleanExecution as any).stderr = (execution as any).stderr;
+   if ((execution as any).codeSnippet)
+    (cleanExecution as any).codeSnippet = (execution as any).codeSnippet;
+   if ((execution as any).codeLanguage)
+    (cleanExecution as any).codeLanguage = (execution as any).codeLanguage;
 
    await this.client.json.set(key, '$', cleanExecution);
 
@@ -520,14 +800,23 @@ export class RedisService {
   executionId: string,
   updates: Partial<JobExecution>
  ): Promise<void> {
-  const key = `execution:${executionId}`;
-
   try {
+   await this.ensureConnection();
+   const key = `execution:${executionId}`;
+
    // Update each field individually to avoid nested object issues
    for (const [field, value] of Object.entries(updates)) {
     if (value !== undefined && value !== null) {
      await this.client.json.set(key, `$.${field}`, value);
     }
+   }
+
+   // Handle isCompleted field specifically
+   if (updates.status && updates.status !== 'running') {
+    const isCompleted = ['success', 'failed', 'timeout', 'cancelled'].includes(
+     updates.status
+    );
+    await this.client.json.set(key, '$.isCompleted', isCompleted);
    }
 
    // Record completion metrics
@@ -552,58 +841,27 @@ export class RedisService {
 
  async getJobExecutions(jobId: string, limit = 10): Promise<JobExecution[]> {
   try {
-   logger.info(`Searching for executions for job: ${jobId}`);
-
-   const query = `*`;
-   logger.info(`Using RedisSearch query: ${query}`);
-
+   await this.ensureConnection();
+   // Normalize jobId by removing optional 'job:' prefix and hyphens for consistent searching
+   const normalizedJobId = jobId.replace(/^job:/, '').replace(/-/g, '');
+   // jobId is indexed as TAG → use braces
+   const query = `@jobId:{${normalizedJobId}}`;
    const results = await this.client.ft.search('idx:executions', query, {
-    LIMIT: {
-     from: 0,
-     size: 100, // Get more results to filter
-    },
-    SORTBY: {
-     BY: 'startedAt',
-     DIRECTION: 'DESC',
-    },
+    LIMIT: { from: 0, size: limit },
+    SORTBY: { BY: 'startedAt', DIRECTION: 'DESC' },
    });
 
-   logger.info(`RedisSearch results for job ${jobId}:`, results);
-
-   // Parse RedisSearch results and filter by jobId
    const executions: JobExecution[] = [];
-
-   if (
-    results &&
-    typeof results === 'object' &&
-    'total' in results &&
-    'documents' in results
-   ) {
-    if (results.total === 0) {
-     logger.warn(`No executions found for job ${jobId}`);
-     return [];
-    }
-
-    // Process documents array and filter by jobId
+   if (results && typeof results === 'object' && 'documents' in results) {
     for (const doc of results.documents) {
      try {
       const execution = doc.value as unknown as JobExecution;
-      if (execution.jobId === jobId) {
-       executions.push(execution);
-       // Stop when we have enough results
-       if (executions.length >= limit) {
-        break;
-       }
-      }
+      executions.push(execution);
      } catch (parseError) {
       logger.error('Failed to process execution document:', parseError);
      }
     }
-   } else {
-    logger.error('Unexpected RedisSearch results format:', typeof results);
    }
-
-   logger.info(`Found ${executions.length} executions for job ${jobId}`);
    return executions;
   } catch (error) {
    logger.error('Failed to get job executions:', error);
@@ -613,10 +871,9 @@ export class RedisService {
 
  async getExecutionLogs(executionId: string, limit = 100): Promise<any[]> {
   try {
-   // Get logs from Redis List (real-time logs stored during execution)
-   const logsKey = `logs:${executionId}`;
-   const logs = await this.client.lRange(logsKey, 0, limit - 1);
-
+   await this.ensureConnection();
+   const key = `execution:${executionId}:logs`;
+   const logs = await this.client.lRange(key, 0, limit - 1);
    return logs.map((log: string) => {
     try {
      return JSON.parse(log);
@@ -632,17 +889,10 @@ export class RedisService {
 
  async addExecutionLog(executionId: string, logEntry: any): Promise<void> {
   try {
-   const logsKey = `logs:${executionId}`;
-   const logData = {
-    ...logEntry,
-    timestamp: new Date().toISOString(),
-   };
-
-   // Add to Redis List (left push to maintain order)
-   await this.client.lPush(logsKey, JSON.stringify(logData));
-
-   // Set expiration (7 days)
-   await this.client.expire(logsKey, 7 * 24 * 60 * 60);
+   await this.ensureConnection();
+   const key = `execution:${executionId}:logs`;
+   await this.client.lPush(key, JSON.stringify(logEntry));
+   await this.client.lTrim(key, 0, 999); // Keep only last 1000 logs
   } catch (error) {
    logger.error('Failed to add execution log:', error);
   }
@@ -655,7 +905,31 @@ export class RedisService {
   timestamp?: number
  ): Promise<void> {
   try {
-   await this.client.ts.add(key, timestamp || Date.now(), value);
+   await this.ensureConnection();
+   const tsKey = key.startsWith('ts:') ? key : `ts:${key}`;
+   const ts = timestamp || Date.now();
+
+   // Try INCRBY for counters; fallback to ADD
+   try {
+    await this.client.ts.incrBy(tsKey, value, { TIMESTAMP: ts });
+   } catch (err: any) {
+    // If series does not exist, create with DUPLICATE_POLICY LAST, then add
+    try {
+     await this.client.ts.create(tsKey, {
+      DUPLICATE_POLICY: 'LAST',
+     } as any);
+    } catch (createErr: any) {
+     // Ignore if already exists
+     if (!String(createErr?.message || '').includes('key already exists')) {
+      logger.warn(
+       `Failed to create TimeSeries ${tsKey}:`,
+       createErr?.message || createErr
+      );
+     }
+    }
+    // After ensuring existence, add the sample
+    await this.client.ts.add(tsKey, ts, value, { ON_DUPLICATE: 'LAST' } as any);
+   }
   } catch (error) {
    logger.error(`Failed to record metric ${key}:`, error);
   }
@@ -667,19 +941,10 @@ export class RedisService {
   toTimestamp: number
  ): Promise<Array<[number, number]>> {
   try {
-   const results = await this.client.ts.range(key, fromTimestamp, toTimestamp);
-   // Handle the TimeSeries results properly
-   if (Array.isArray(results)) {
-    return results.map((item: unknown) => {
-     if (Array.isArray(item) && item.length >= 2) {
-      const timestamp = item[0];
-      const value = item[1];
-      return [Number(timestamp), parseFloat(String(value))];
-     }
-     return [0, 0]; // Fallback for malformed data
-    });
-   }
-   return [];
+   await this.ensureConnection();
+   const tsKey = key.startsWith('ts:') ? key : `ts:${key}`;
+   const range = await this.client.ts.range(tsKey, fromTimestamp, toTimestamp);
+   return range.map((point: any) => [point.timestamp, point.value]);
   } catch (error) {
    logger.error(`Failed to get metric range for ${key}:`, error);
    return [];
@@ -692,17 +957,16 @@ export class RedisService {
   data: Record<string, unknown>
  ): Promise<void> {
   try {
-   const message = {
-    type: event,
-    data,
+   await this.ensureConnection();
+   const channel = `job:${event}`;
+   const message = JSON.stringify({
+    ...data,
     timestamp: new Date().toISOString(),
-   };
-
-   // Publish to Redis channel
-   await this.client.publish('job_events', JSON.stringify(message));
-   logger.debug(`Published job event: ${event}`);
+   });
+   await this.client.publish(channel, message);
+   logger.info(`Published job event: ${event}`);
   } catch (error) {
-   logger.error('Failed to publish job event:', error);
+   logger.error(`Failed to publish job event ${event}:`, error);
   }
  }
 
@@ -711,17 +975,16 @@ export class RedisService {
   data: Record<string, unknown>
  ): Promise<void> {
   try {
-   const message = {
-    type: event,
-    data,
+   await this.ensureConnection();
+   const channel = `execution:${event}`;
+   const message = JSON.stringify({
+    ...data,
     timestamp: new Date().toISOString(),
-   };
-
-   // Publish to Redis channel
-   await this.client.publish('job_execution', JSON.stringify(message));
-   logger.debug(`Published job execution: ${event}`);
+   });
+   await this.client.publish(channel, message);
+   logger.info(`Published execution event: ${event}`);
   } catch (error) {
-   logger.error('Failed to publish job execution:', error);
+   logger.error(`Failed to publish execution event ${event}:`, error);
   }
  }
 
@@ -730,17 +993,16 @@ export class RedisService {
   data: Record<string, unknown>
  ): Promise<void> {
   try {
-   const message = {
-    type: event,
-    data,
+   await this.ensureConnection();
+   const channel = `metrics:${event}`;
+   const message = JSON.stringify({
+    ...data,
     timestamp: new Date().toISOString(),
-   };
-
-   // Publish to Redis channel
-   await this.client.publish('system_metrics', JSON.stringify(message));
-   logger.debug(`Published system metrics: ${event}`);
+   });
+   await this.client.publish(channel, message);
+   logger.info(`Published system metrics: ${event}`);
   } catch (error) {
-   logger.error('Failed to publish system metrics:', error);
+   logger.error(`Failed to publish system metrics ${event}:`, error);
   }
  }
 
@@ -749,26 +1011,27 @@ export class RedisService {
   data: Record<string, unknown>
  ): Promise<void> {
   try {
-   const message = {
-    type: event,
-    data,
+   await this.ensureConnection();
+   const channel = `notification:${event}`;
+   const message = JSON.stringify({
+    ...data,
     timestamp: new Date().toISOString(),
-   };
-
-   // Publish to Redis channel
-   await this.client.publish('notifications', JSON.stringify(message));
-   logger.debug(`Published notification: ${event}`);
+   });
+   await this.client.publish(channel, message);
+   logger.info(`Published notification: ${event}`);
   } catch (error) {
-   logger.error('Failed to publish notification:', error);
+   logger.error(`Failed to publish notification ${event}:`, error);
   }
  }
 
  // Health Check
  async ping(): Promise<boolean> {
   try {
+   await this.ensureConnection();
    const result = await this.client.ping();
    return result === 'PONG';
   } catch (error) {
+   logger.error('Redis ping failed:', error);
    return false;
   }
  }
@@ -776,20 +1039,27 @@ export class RedisService {
  // Health check method for Redis and job statistics
  async getDebugInfo(): Promise<any> {
   try {
-   const keys = await this.client.keys('*');
-   const jobKeys = keys.filter((key) => key.startsWith('job:'));
-   const executionKeys = keys.filter((key) => key.startsWith('execution:'));
-
+   await this.ensureConnection();
+   const info = await this.client.info();
+   const keys = await this.client.dbSize();
    return {
-    totalKeys: keys.length,
-    jobCount: jobKeys.length,
-    executionCount: executionKeys.length,
-    redis: 'connected',
+    connected: this.isConnected,
+    info: info.split('\r\n').reduce((acc: any, line: string) => {
+     const [key, value] = line.split(':');
+     if (key && value) {
+      acc[key] = value;
+     }
+     return acc;
+    }, {}),
+    keys,
+    reconnectAttempts: this.reconnectAttempts,
    };
-  } catch (error: any) {
+  } catch (error) {
+   logger.error('Failed to get debug info:', error);
    return {
-    redis: 'error',
-    error: error?.message || 'Unknown error',
+    connected: this.isConnected,
+    error: error instanceof Error ? error.message : 'Unknown error',
+    reconnectAttempts: this.reconnectAttempts,
    };
   }
  }
@@ -938,7 +1208,6 @@ export class RedisService {
   }
  }
 
- // Clear all data from database (for development/testing)
  // Get all enabled jobs (for system startup)
  async getAllEnabledJobs(): Promise<JobData[]> {
   try {
@@ -983,6 +1252,7 @@ export class RedisService {
   }
  }
 
+ // Clear all data from database (for development/testing)
  async clearDatabase(): Promise<void> {
   try {
    logger.info('Clearing all data from Redis database...');
