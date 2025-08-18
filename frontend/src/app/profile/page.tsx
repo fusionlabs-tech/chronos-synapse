@@ -9,8 +9,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { apiClient } from '@/lib/api';
 import { User } from '@/types';
 import { useToast } from '@/components/ui/toasts';
-import { Calendar, Crown } from 'lucide-react';
+import { Calendar, Crown, Brain, Plus, Key, Settings, Globe, Zap, Trash2, Save, Shield } from 'lucide-react';
 import { Select } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 
 // Simple brand icons (inline SVG) for OAuth providers
 function OAuthIcon({ provider }: { provider?: 'GOOGLE' | 'GITHUB' }) {
@@ -73,6 +74,27 @@ export default function ProfilePage() {
   endpointBase: '',
   orgId: '',
  });
+
+ // Helper functions for better UX
+ const getModelPlaceholder = (provider: string) => {
+  switch (provider) {
+   case 'OPENAI': return 'e.g., gpt-4, gpt-3.5-turbo';
+   case 'ANTHROPIC': return 'e.g., claude-3-5-sonnet-20241022';
+   case 'GOOGLE': return 'e.g., gemini-pro, gemini-1.5-pro';
+   case 'AZURE_OPENAI': return 'e.g., gpt-4, gpt-35-turbo';
+   default: return 'Model name';
+  }
+ };
+
+ const getEndpointPlaceholder = (provider: string) => {
+  switch (provider) {
+   case 'OPENAI': return 'https://api.openai.com/v1';
+   case 'ANTHROPIC': return 'https://api.anthropic.com';
+   case 'GOOGLE': return 'https://generativelanguage.googleapis.com';
+   case 'AZURE_OPENAI': return 'https://your-resource.openai.azure.com';
+   default: return 'https://api.your-provider.com';
+  }
+ };
 
  // Helpers
  const formatDateTime = (iso?: string) => {
@@ -351,53 +373,125 @@ export default function ProfilePage() {
      <Card className='card-primary'>
       <CardHeader className='pb-6'>
        <div className='flex items-center justify-between'>
-        <CardTitle className='text-xl'>AI Providers (BYOK)</CardTitle>
+        <div>
+         <CardTitle className='text-xl flex items-center gap-2'>
+          <div className='w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center'>
+           <Brain className='w-4 h-4 text-white' />
+          </div>
+          AI Providers (BYOK)
+         </CardTitle>
+         <p className='text-sm text-neutral-600 mt-1'>
+          Bring your own AI keys for enhanced analysis and insights
+         </p>
+        </div>
         <Button
-         variant='outline'
-         size='sm'
          onClick={() => setAiModalOpen(true)}
+         className='btn-primary'
         >
+         <Plus className='w-4 h-4 mr-2' />
          Add Provider
         </Button>
        </div>
       </CardHeader>
       <CardContent>
        {aiKeys.length === 0 ? (
-        <div className='text-sm text-neutral-600'>
-         No AI providers added yet.
+        <div className='text-center py-8'>
+         <div className='w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4'>
+          <Brain className='w-8 h-8 text-purple-500' />
+         </div>
+         <h3 className='text-lg font-medium text-neutral-900 mb-2'>
+          No AI Providers Added
+         </h3>
+         <p className='text-neutral-600 mb-4 max-w-md mx-auto'>
+          Add your AI provider keys to enable intelligent job analysis,
+          anomaly detection, and performance optimization.
+         </p>
+         <Button
+          onClick={() => setAiModalOpen(true)}
+          className='btn-primary'
+         >
+          <Plus className='w-4 h-4 mr-2' />
+          Add Your First Provider
+         </Button>
         </div>
        ) : (
-        <div className='space-y-3'>
+        <div className='space-y-4'>
          {aiKeys.map((k) => (
           <div
            key={k.id}
-           className='flex items-center justify-between p-3 bg-neutral-50 rounded'
+           className='border border-neutral-200 rounded-lg p-4 hover:border-purple-300 transition-colors'
           >
-           <div className='flex flex-col'>
-            <div className='text-sm font-medium text-neutral-900'>
-             {k.provider}
-             {k.alias ? ` · ${k.alias}` : ''}
+           <div className='flex items-start justify-between'>
+            <div className='flex items-start gap-3'>
+             <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+              k.provider === 'OPENAI' ? 'bg-green-100' :
+              k.provider === 'ANTHROPIC' ? 'bg-orange-100' :
+              k.provider === 'GOOGLE' ? 'bg-blue-100' :
+              k.provider === 'AZURE_OPENAI' ? 'bg-blue-100' :
+              'bg-gray-100'
+             }`}>
+              <Brain className={`w-5 h-5 ${
+               k.provider === 'OPENAI' ? 'text-green-600' :
+               k.provider === 'ANTHROPIC' ? 'text-orange-600' :
+               k.provider === 'GOOGLE' ? 'text-blue-600' :
+               k.provider === 'AZURE_OPENAI' ? 'text-blue-600' :
+               'text-gray-600'
+              }`} />
+             </div>
+             <div className='flex-1'>
+              <div className='flex items-center gap-2 mb-1'>
+               <h4 className='font-medium text-neutral-900'>
+                {k.provider}
+               </h4>
+               {k.alias && (
+                <Badge variant='outline' className='text-xs'>
+                 {k.alias}
+                </Badge>
+               )}
+               <Badge className={k.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                {k.isActive ? 'Active' : 'Inactive'}
+               </Badge>
+              </div>
+              <div className='text-sm text-neutral-600 space-y-1'>
+               <div className='flex items-center gap-2'>
+                <Key className='w-3 h-3' />
+                <span className='font-mono text-xs'>{k.maskedKey}</span>
+               </div>
+               {k.defaultModel && (
+                <div className='flex items-center gap-2'>
+                 <Settings className='w-3 h-3' />
+                 <span>Model: {k.defaultModel}</span>
+                </div>
+               )}
+               {k.endpointBase && (
+                <div className='flex items-center gap-2'>
+                 <Globe className='w-3 h-3' />
+                 <span className='truncate'>Endpoint: {k.endpointBase}</span>
+                </div>
+               )}
+              </div>
+             </div>
             </div>
-            <div className='text-xs text-neutral-500'>
-             {k.maskedKey} {k.defaultModel ? `· ${k.defaultModel}` : ''} ·{' '}
-             {k.isActive ? 'Active' : 'Inactive'}
+            <div className='flex gap-2'>
+             <Button
+              variant='outline'
+              size='sm'
+              onClick={() => handleTestAiKey(k.id)}
+              className='text-blue-600 border-blue-200 hover:bg-blue-50'
+             >
+              <Zap className='w-3 h-3 mr-1' />
+              Test
+             </Button>
+             <Button
+              variant='outline'
+              size='sm'
+              onClick={() => handleDeleteAiKey(k.id)}
+              className='text-red-600 border-red-200 hover:bg-red-50'
+             >
+              <Trash2 className='w-3 h-3 mr-1' />
+              Delete
+             </Button>
             </div>
-           </div>
-           <div className='flex gap-2'>
-            <Button
-             variant='outline'
-             size='sm'
-             onClick={() => handleTestAiKey(k.id)}
-            >
-             Test
-            </Button>
-            <Button
-             variant='outline'
-             size='sm'
-             onClick={() => handleDeleteAiKey(k.id)}
-            >
-             Delete
-            </Button>
            </div>
           </div>
          ))}
@@ -405,10 +499,20 @@ export default function ProfilePage() {
        )}
 
        {aiModalOpen && (
-        <div className='mt-6 border rounded-lg p-4 bg-white'>
-         <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+        <div className='mt-6 border-2 border-purple-200 rounded-xl p-6 bg-gradient-to-br from-purple-50 to-pink-50'>
+         <div className='flex items-center gap-3 mb-6'>
+          <div className='w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center'>
+           <Plus className='w-5 h-5 text-white' />
+          </div>
           <div>
-           <Label className='text-sm text-neutral-700'>Provider</Label>
+           <h3 className='text-lg font-medium text-neutral-900'>Add AI Provider</h3>
+           <p className='text-sm text-neutral-600'>Configure your AI provider for intelligent analysis</p>
+          </div>
+         </div>
+         
+         <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+          <div>
+           <Label className='text-sm font-medium text-neutral-700 mb-2 block'>Provider</Label>
            <Select
             value={aiForm.provider}
             onChange={(e) =>
@@ -417,75 +521,113 @@ export default function ProfilePage() {
               provider: (e.target as HTMLSelectElement).value,
              }))
             }
+            className='w-full'
            >
-            <option value='OPENAI'>OpenAI</option>
-            <option value='ANTHROPIC'>Anthropic</option>
-            <option value='GOOGLE'>Google</option>
+            <option value='OPENAI'>OpenAI (GPT-4, GPT-3.5)</option>
+            <option value='ANTHROPIC'>Anthropic (Claude)</option>
+            <option value='GOOGLE'>Google (Gemini)</option>
             <option value='AZURE_OPENAI'>Azure OpenAI</option>
-            <option value='CUSTOM'>Custom</option>
+            <option value='CUSTOM'>Custom Provider</option>
            </Select>
           </div>
+          
           <div>
-           <Label className='text-sm text-neutral-700'>Alias (optional)</Label>
+           <Label className='text-sm font-medium text-neutral-700 mb-2 block'>Alias (optional)</Label>
            <Input
             value={aiForm.alias}
             onChange={(e) =>
              setAiForm((p) => ({ ...p, alias: e.target.value }))
             }
+            placeholder='e.g., "Production API" or "Team Key"'
+            className='input-primary'
            />
           </div>
+          
           <div className='md:col-span-2'>
-           <Label className='text-sm text-neutral-700'>API Key</Label>
+           <Label className='text-sm font-medium text-neutral-700 mb-2 block flex items-center gap-2'>
+            <Key className='w-4 h-4' />
+            API Key
+           </Label>
            <Input
             type='password'
             value={aiForm.apiKey}
             onChange={(e) =>
              setAiForm((p) => ({ ...p, apiKey: e.target.value }))
             }
+            placeholder='Enter your API key'
+            className='input-primary font-mono'
            />
           </div>
+          
           <div>
-           <Label className='text-sm text-neutral-700'>Default Model</Label>
+           <Label className='text-sm font-medium text-neutral-700 mb-2 block'>Default Model</Label>
            <Input
             value={aiForm.defaultModel}
             onChange={(e) =>
              setAiForm((p) => ({ ...p, defaultModel: e.target.value }))
             }
+            placeholder={getModelPlaceholder(aiForm.provider)}
+            className='input-primary'
            />
           </div>
+          
           <div>
-           <Label className='text-sm text-neutral-700'>
-            Endpoint Base (optional)
-           </Label>
+           <Label className='text-sm font-medium text-neutral-700 mb-2 block'>Endpoint Base (optional)</Label>
            <Input
             value={aiForm.endpointBase}
             onChange={(e) =>
              setAiForm((p) => ({ ...p, endpointBase: e.target.value }))
             }
-            placeholder='https://api.openai.com/v1'
+            placeholder={getEndpointPlaceholder(aiForm.provider)}
+            className='input-primary font-mono text-xs'
            />
           </div>
-          <div>
-           <Label className='text-sm text-neutral-700'>
-            Org/Project ID (optional)
-           </Label>
+          
+          <div className='md:col-span-2'>
+           <Label className='text-sm font-medium text-neutral-700 mb-2 block'>Organization/Project ID (optional)</Label>
            <Input
             value={aiForm.orgId}
             onChange={(e) =>
              setAiForm((p) => ({ ...p, orgId: e.target.value }))
             }
+            placeholder='Organization or project identifier'
+            className='input-primary'
            />
           </div>
          </div>
-         <div className='mt-4 flex gap-2'>
-          <Button variant='outline' onClick={() => setAiModalOpen(false)}>
+         
+         <div className='mt-6 flex gap-3'>
+          <Button 
+           variant='outline' 
+           onClick={() => setAiModalOpen(false)}
+           className='flex-1 md:flex-none'
+          >
            Cancel
           </Button>
-          <Button onClick={handleCreateAiKey}>Save</Button>
+          <Button 
+           onClick={handleCreateAiKey}
+           disabled={!aiForm.apiKey || !aiForm.provider}
+           className='btn-primary flex-1 md:flex-none'
+          >
+           <Save className='w-4 h-4 mr-2' />
+           Save Provider
+          </Button>
          </div>
-         <p className='text-xs text-neutral-500 mt-3'>
-          Your key is encrypted at rest and never shown after saving.
-         </p>
+         
+         <div className='mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg'>
+          <div className='flex gap-3'>
+           <Shield className='w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5' />
+           <div>
+            <h4 className='text-sm font-medium text-blue-900 mb-1'>Security Information</h4>
+            <ul className='text-xs text-blue-700 space-y-1'>
+             <li>• Your API key is encrypted using AES-256-GCM before storage</li>
+             <li>• Keys are only decrypted when needed for AI analysis</li>
+             <li>• We never log or store the decrypted keys</li>
+             <li>• You can revoke access at any time by deleting the provider</li>
+            </ul>
+           </div>
+          </div>
+         </div>
         </div>
        )}
       </CardContent>

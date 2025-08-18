@@ -18,6 +18,7 @@ import {
  Search,
  Brain,
  Activity,
+ Clock,
 } from 'lucide-react';
 import NotificationDropdown from '@/components/NotificationDropdown';
 
@@ -30,7 +31,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
  const pathname = usePathname();
  const { user, logout } = useAuth();
  const userMenuRef = useRef<HTMLDivElement>(null);
- const { pubSubConnected, pubSubError } = useRealtime();
+ const { pubSubConnected } = useRealtime();
 
  // Close user menu when clicking outside
  useEffect(() => {
@@ -57,18 +58,12 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
    {/* Top Header Bar with brand, nav and status */}
    <header className='h-16 card-primary border-b border-neutral-200/50 flex items-center px-6 shadow-lg'>
     {/* Left: Logo */}
-    <div className='flex items-center gap-3'>
-     <div className='relative w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg'>
-      <div className='relative'>
-       <div className='w-5 h-5 rounded-full border border-white/80 relative'>
-        <div className='absolute top-1/2 left-1/2 w-0.5 h-1.5 bg-white transform -translate-x-1/2 -translate-y-full origin-bottom rotate-45'></div>
-        <div className='absolute top-1/2 left-1/2 w-0.5 h-1 bg-white transform -translate-x-1/2 -translate-y-full origin-bottom rotate-90'></div>
-        <div className='absolute top-1/2 left-1/2 w-0.5 h-0.5 bg-white rounded-full transform -translate-x-1/2 -translate-y-1/2'></div>
-       </div>
-      </div>
+    <Link href='/dashboard' className='flex items-center space-x-2 hover:opacity-80 transition-opacity'>
+     <div className='w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center'>
+      <Clock className='w-5 h-5 text-white' />
      </div>
-     <h1 className='text-xl font-bold text-neutral-900'>Chronos</h1>
-    </div>
+     <span className='text-xl font-bold gradient-text-primary'>Chronos</span>
+    </Link>
 
     {/* Center: Navigation - flex-1 and centered */}
     <nav className='flex-1 flex items-center justify-center'>

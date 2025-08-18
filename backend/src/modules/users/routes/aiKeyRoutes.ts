@@ -1,25 +1,7 @@
 import { FastifyInstance, FastifyReply } from 'fastify';
 import { requireAuth, AuthenticatedRequest } from '../../../middleware/auth';
 import prisma from '../../../lib/prisma';
-import crypto from 'node:crypto';
-
-function getCryptoKey(): Buffer {
- const base = process.env.AI_SECRET_KEY;
- if (!base) throw new Error('AI_SECRET_KEY is required');
- const raw = Buffer.from(base, 'base64').toString('utf8');
- const buf = Buffer.alloc(32);
- Buffer.from(raw).copy(buf);
- return buf;
-}
-
-function encrypt(plain: string): string {
- const key = getCryptoKey();
- const iv = crypto.randomBytes(12);
- const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
- const enc = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
- const tag = cipher.getAuthTag();
- return Buffer.concat([iv, tag, enc]).toString('base64');
-}
+import { aiKeyService } from '../../../services/AIKeyService';
 
 export default async function aiKeyRoutes(fastify: FastifyInstance) {
  // List AI keys (masked)
@@ -61,7 +43,7 @@ export default async function aiKeyRoutes(fastify: FastifyInstance) {
     return reply
      .status(400)
      .send({ success: false, error: 'provider and apiKey are required' });
-   const enc = encrypt(String(apiKey));
+   const enc = aiKeyService.encryptApiKey(String(apiKey));
    const row = await prisma.aiKey.create({
     data: {
      userId: user.id,
@@ -90,13 +72,47 @@ export default async function aiKeyRoutes(fastify: FastifyInstance) {
   }
  );
 
- // Test AI key (no external call for now)
+ // Test AI key against provider
  fastify.post(
   '/ai-keys/:id/test',
   { preHandler: requireAuth },
   async (req: AuthenticatedRequest, reply: FastifyReply) => {
-   // Placeholder: return ok=true; provider checks can be added later
-   return reply.send({ success: true, ok: true });
+   const user = req.user!;
+   const { id } = req.params as any;
+   try {
+    console.log('Testing AI key:', { userId: user.id, keyId: id });
+
+    const adapter = await aiKeyService.buildAdapterByKeyId(user.id, id);
+    if (!adapter) {
+     console.log('No adapter available');
+     return reply.send({
+      success: true,
+      ok: false,
+      error: 'adapter_unavailable',
+     });
+    }
+
+    console.log('Adapter created, testing with provider...');
+
+    // Simple timeout wrapper
+    const timeoutPromise = new Promise<never>((_, reject) => {
+     setTimeout(() => reject(new Error('timeout')), 7000);
+    });
+
+    const result = await Promise.race([
+     adapter.chatJSON('Return {"ok":true} exactly as JSON.', {
+      system: 'Respond with strict JSON only.',
+     }),
+     timeoutPromise,
+    ]);
+
+    console.log('Provider response:', result);
+    const ok = !!(result && (result.ok === true || result.success === true));
+    return reply.send({ success: true, ok });
+   } catch (e: any) {
+    console.error('AI key test error:', e);
+    return reply.send({ success: true, ok: false, error: 'provider_error' });
+   }
   }
  );
 }

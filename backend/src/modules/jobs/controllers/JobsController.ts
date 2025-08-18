@@ -23,7 +23,10 @@ export class JobsController {
     view = 'list',
    } = request.query as JobQueryDto;
 
-   const filters: Record<string, any> = {};
+   // IMPORTANT: Filter jobs by authenticated user ID
+   const userId = (request.user?.id || '').replace(/-/g, '');
+   const filters: Record<string, any> = { userId };
+   
    if (enabled !== undefined) filters.enabled = enabled;
    if (teamId) filters.teamId = teamId;
 
@@ -64,8 +67,10 @@ export class JobsController {
 
  static async getJob(request: AuthenticatedRequest, reply: FastifyReply) {
   try {
+   // Job ownership is already verified by requireJobOwnership middleware
    const { id } = request.params as { id: string };
    const normalizedId = decodeURIComponent(id);
+   
    const job = await redisService.getJob(normalizedId);
 
    if (!job) {
@@ -77,10 +82,11 @@ export class JobsController {
     if (!altJob) {
      return reply.status(404).send({ success: false, error: 'Job not found' });
     }
-    return reply.send({ success: true, data: altJob });
+    
+    return reply.send({ success: true, data: { job: altJob } });
    }
 
-   return reply.send({ success: true, data: job });
+   return reply.send({ success: true, data: { job } });
   } catch (error) {
    request.log.error('Failed to get job:', error);
    return reply
@@ -125,6 +131,7 @@ export class JobsController {
   reply: FastifyReply
  ) {
   try {
+   // Job ownership is already verified by requireJobOwnership middleware
    const { id } = request.params as { id: string };
    const { limit = '10' } = request.query as JobExecutionQueryDto;
 
@@ -144,6 +151,7 @@ export class JobsController {
   reply: FastifyReply
  ) {
   try {
+   // Job ownership is already verified by requireJobOwnership middleware
    const { id, executionId } = request.params as {
     id: string;
     executionId: string;
@@ -155,6 +163,13 @@ export class JobsController {
     return reply
      .status(404)
      .send({ success: false, error: 'Execution not found' });
+   }
+
+   // Additional check: verify execution belongs to the job
+   const executionJobId = ((execution as any)?.jobId || '').replace(/-/g, '');
+   const normalizedJobId = id.replace(/^job:/, '').replace(/-/g, '');
+   if (executionJobId !== normalizedJobId) {
+    return reply.status(403).send({ success: false, error: 'Access denied' });
    }
 
    return reply.send({ success: true, data: execution });

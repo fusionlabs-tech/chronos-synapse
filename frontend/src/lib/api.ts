@@ -327,79 +327,6 @@ class ApiClient {
  }
 
  // AI Analysis endpoints
- async performComprehensiveAnalysis(jobId: string): Promise<AIAnalysisResult> {
-  const raw = await this.request<
-   AIAnalysisResult | { success?: boolean; data?: AIAnalysisResult }
-  >(`/ai/analyze-job/${jobId}`, {
-   method: 'POST',
-   body: JSON.stringify({}),
-  });
-  const wrapped = raw as any;
-  if (wrapped && typeof wrapped === 'object' && wrapped.data) {
-   return wrapped.data as AIAnalysisResult;
-  }
-  return raw as AIAnalysisResult;
- }
-
- async detectAnomalies(
-  jobId: string,
-  executionId: string
- ): Promise<AnomalyDetectionResult> {
-  return this.request<AnomalyDetectionResult>(`/ai/detect-anomalies/${jobId}`, {
-   method: 'POST',
-   body: JSON.stringify({ executionId }),
-  });
- }
-
- async suggestOptimalSchedule(
-  jobId: string
- ): Promise<PredictiveScheduleResult> {
-  return this.request<PredictiveScheduleResult>(
-   `/ai/suggest-schedule/${jobId}`
-  );
- }
-
- async determineRetryStrategy(
-  jobId: string,
-  executionId: string,
-  attempt: number
- ): Promise<SmartRetryResult> {
-  return this.request<SmartRetryResult>(`/ai/retry-strategy/${jobId}`, {
-   method: 'POST',
-   body: JSON.stringify({ executionId, attempt }),
-  });
- }
-
- async analyzePerformance(
-  jobId: string
- ): Promise<PerformanceOptimizationResult> {
-  return this.request<PerformanceOptimizationResult>(
-   `/ai/optimize-performance/${jobId}`
-  );
- }
-
- async getAIAnalysis(
-  jobId: string
- ): Promise<{ analysis: AIAnalysisResult | null }> {
-  return this.request<{ analysis: AIAnalysisResult | null }>(
-   `/ai/analysis/${jobId}`
-  );
- }
-
- async getAllAIAnalyses(): Promise<{ analyses: AIAnalysisResult[] }> {
-  return this.request<{ analyses: AIAnalysisResult[] }>('/ai/analyses');
- }
-
- async analyzeCode(codeData: {
-  code: string;
-  language: string;
-  context?: any;
- }): Promise<any> {
-  return this.request('/jobs/analyze-code', {
-   method: 'POST',
-   body: JSON.stringify(codeData),
-  });
- }
 
  // User Profile Management
  async updateProfile(profileData: {
@@ -492,6 +419,48 @@ class ApiClient {
   return this.request(`/users/ai-keys/${encodeURIComponent(id)}/test`, {
    method: 'POST',
   });
+ }
+
+ // AI Analysis Methods
+ async runAIAnalysis(jobId: string): Promise<AIAnalysisResult> {
+  return this.request(`/ai/analyze-job/${jobId}`, {
+   method: 'POST',
+  });
+ }
+
+ async getAIAnalysis(jobId: string): Promise<AIAnalysisResult | null> {
+  try {
+   return await this.request(`/ai/analysis/${jobId}`);
+  } catch (error) {
+   // Return null if no analysis exists yet
+   return null;
+  }
+ }
+
+ async detectAnomalies(jobId: string, timeRange?: string): Promise<AnomalyDetectionResult> {
+  return this.request(`/ai/detect-anomalies/${jobId}`, {
+   method: 'POST',
+   body: JSON.stringify({ timeRange }),
+  });
+ }
+
+ async suggestSchedule(jobId: string): Promise<PredictiveScheduleResult> {
+  return this.request(`/ai/suggest-schedule/${jobId}`);
+ }
+
+ async getRetryStrategy(jobId: string, error?: string): Promise<SmartRetryResult> {
+  return this.request(`/ai/retry-strategy/${jobId}`, {
+   method: 'POST',
+   body: JSON.stringify({ error }),
+  });
+ }
+
+ async optimizePerformance(jobId: string): Promise<PerformanceOptimizationResult> {
+  return this.request(`/ai/optimize-performance/${jobId}`);
+ }
+
+ async getAllAIAnalyses(): Promise<{ data: AIAnalysisResult[] }> {
+  return this.request('/ai/analyses');
  }
 
  // Admin Management

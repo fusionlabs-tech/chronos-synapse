@@ -64,7 +64,7 @@ function AIInsightsContent() {
  const performAnalysis = async (jobId: string) => {
   try {
    setAnalyzing(true);
-   const analysis = await apiClient.performComprehensiveAnalysis(jobId);
+   const analysis = await apiClient.runAIAnalysis(jobId);
    setAiAnalysis(analysis);
    showToast('AI analysis completed successfully!', 'success');
   } catch (error) {
