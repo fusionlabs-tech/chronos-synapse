@@ -34,6 +34,7 @@ model User {
   apiKeys       ApiKey[]
   sessions      UserSession[]
   notifications Notification[]
+  aiKeys        AiKey[]
 
   @@map("users")
 }
@@ -170,6 +171,25 @@ model Notification {
   @@map("notifications")
 }
 
+model AiKey {
+  id           String     @id @default(uuid())
+  userId       String
+  provider     AiProvider
+  alias        String?
+  apiKeyEnc    String
+  defaultModel String?
+  endpointBase String?
+  orgId        String?
+  isActive     Boolean    @default(true)
+  lastUsedAt   DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("ai_keys")
+}
+
 enum Role {
   ADMIN
   USER
@@ -192,4 +212,12 @@ enum ExecutionStatus {
 enum OAuthProvider {
   GOOGLE
   GITHUB
+}
+
+enum AiProvider {
+  OPENAI
+  ANTHROPIC
+  GOOGLE
+  AZURE_OPENAI
+  CUSTOM
 }

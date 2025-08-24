@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/ui/toasts';
 import { Button } from '@/components/ui/button';
@@ -13,8 +14,8 @@ import {
  Cpu,
  Database,
  Globe,
+ ArrowLeft,
  Brain,
- Activity,
 } from 'lucide-react';
 
 export default function LoginPage() {
@@ -175,6 +176,17 @@ export default function LoginPage() {
     </div>
    </div>
 
+   {/* Back to Home Link */}
+   <div className='absolute top-4 left-4 z-50'>
+    <Link 
+     href='/'
+     className='inline-flex items-center px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-white/20 rounded-lg transition-all duration-200 backdrop-blur-sm'
+    >
+     <ArrowLeft className='w-4 h-4 mr-2' />
+     Back to Home
+    </Link>
+   </div>
+
    {/* Main Content */}
    <div className='relative z-10 min-h-screen flex items-center justify-center p-4'>
     <div className='w-full max-w-md'>
@@ -182,25 +194,8 @@ export default function LoginPage() {
      <div className='text-center mb-8'>
       {/* Combined Logo with Text */}
       <div className='flex items-center justify-center gap-4 mb-3'>
-       <div className='relative w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center shadow-lg'>
-        <div className='relative'>
-         {/* Clock face */}
-         <div className='w-7 h-7 rounded-full border-2 border-white/80 relative'>
-          {/* Clock hands */}
-          <div className='absolute top-1/2 left-1/2 w-0.5 h-2.5 bg-white transform -translate-x-1/2 -translate-y-full origin-bottom rotate-45'></div>
-          <div className='absolute top-1/2 left-1/2 w-0.5 h-2 bg-white transform -translate-x-1/2 -translate-y-full origin-bottom rotate-90'></div>
-          {/* Center dot */}
-          <div className='absolute top-1/2 left-1/2 w-1 h-1 bg-white rounded-full transform -translate-x-1/2 -translate-y-1/2'></div>
-         </div>
-
-         {/* AI/Neural network elements */}
-         <div className='absolute -top-0.5 -right-0.5 w-3 h-3 bg-gradient-to-br from-blue-400 to-purple-400 rounded-full flex items-center justify-center'>
-          <Brain className='w-1.5 h-1.5 text-white' />
-         </div>
-         <div className='absolute -bottom-0.5 -left-0.5 w-2.5 h-2.5 bg-gradient-to-br from-pink-400 to-purple-400 rounded-full flex items-center justify-center'>
-          <Activity className='w-1 h-1 text-white' />
-         </div>
-        </div>
+       <div className='w-14 h-14 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg'>
+        <Clock className='w-8 h-8 text-white' />
        </div>
        <span className='text-4xl font-black bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent tracking-tight font-poppins'>
         Chronos

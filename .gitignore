@@ -82,3 +82,7 @@ Thumbs.db
 tmp/
 temp/
 examples/sdk-local-test/
+
+# MD
+PRODUCTION_ROADMAP.md
+CLAUDE.md

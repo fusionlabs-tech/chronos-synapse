@@ -11,10 +11,18 @@ export async function requireJobOwnership(
  request: AuthenticatedRequest,
  reply: FastifyReply
 ) {
- const { id } = request.params as { id: string };
+ const { id, jobId } = request.params as { id?: string; jobId?: string };
+ const actualJobId = id || jobId;
+
+ if (!actualJobId) {
+  return reply.status(400).send({
+   error: 'Bad Request',
+   message: 'Job ID is required',
+  });
+ }
 
  try {
-  const job = await redisService.getJob(id);
+  const job = await redisService.getJob(actualJobId);
 
   if (!job) {
    return reply.status(404).send({
