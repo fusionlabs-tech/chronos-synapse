@@ -705,7 +705,7 @@ export default function HomePage() {
       <Link href='/auth/login'>
        <Button
         size='lg'
-        className='bg-white text-purple-600 hover:bg-gray-100 px-8 py-4 text-lg font-semibold'
+        className='bg-white text-purple-600 hover:bg-transparent hover:text-white hover:border-white hover:border-2 px-8 py-4 text-lg font-semibold transition-all duration-200 border-2 border-white'
        >
         Start Your Free Trial
        </Button>
@@ -714,7 +714,7 @@ export default function HomePage() {
        <Button
         size='lg'
         variant='outline'
-        className='border-white text-white hover:bg-white hover:text-purple-600 px-8 py-4 text-lg transition-all duration-200'
+        className='border-white border-2 text-white bg-transparent hover:bg-white hover:text-purple-600 px-8 py-4 text-lg transition-all duration-200'
        >
         Schedule a Demo
        </Button>
@@ -734,7 +734,7 @@ export default function HomePage() {
        <span className='text-xl font-bold text-white'>Chronos</span>
       </div>
       <div className='text-sm'>
-       © 2025 Fusion Labs. All rights reserved.
+       © {new Date().getFullYear()} Fusion Labs. All rights reserved.
       </div>
      </div>
     </div>
